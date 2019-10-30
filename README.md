@@ -96,6 +96,24 @@ int main () {
 
 Code from [here](https://notes.underscorediscovery.com/constexpr-fnv1a/).
 
+
+
+`g++ -std=c++2a main.cpp`
+
+`main.cpp`:
+```cpp
+#include <phd/embed.hpp>
+
+int main () {
+	constexpr std::span<const char> data = phd::embed("/dev/urandom", 1);
+
+	static_assert((data[0] % 2) == '\0', "You lose.");
+
+	return 0;
+}
+
+```
+
 ### Preprocessor
 
 `gcc -std=c2x -fembed-path ./baz main.c`
@@ -127,9 +145,29 @@ int main () {
 	;
 
 	const int size = sizeof(data) / sizeof(*data);
-	bool is_null_terminated = data[size -1] == '\0';
+	bool is_null_terminated = data[size - 1] == '\0';
 	assert(not is_null_terminated);
 
 	return 0;
+}
+```
+
+
+`gcc -std=c2x main.c`
+
+`main.c`:
+```c
+#include <assert.h>
+#include <stdbool.h>
+
+int main () {
+	const char data[] =
+#embed 4 "/dev/urandom"
+	;
+
+	assert(size == 4);
+
+	// ¯\_(ツ)_/¯
+	return data[0];
 }
 ```
