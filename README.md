@@ -4,11 +4,11 @@ The library portion of [P1040](https://thephd.github.io/vendor/future_cxx/papers
 
 CC0.
 
-| Compiler | __builtin_embed | __builtin_embed_n | #embed | #embed_str |
-|:--------:|:---------------:|:-----------------:|:-------:|:----------:|
-| GCC |  🔧 WIP 🔧 |  🔧 WIP 🔧 |  🔧 WIP 🔧  |  🔧 WIP 🔧 |
-| Clang |  🔧 WIP 🔧 |  🔧 WIP 🔧 | ✖️ | ✖️ |
-| MSVC |  ✖️ | ✖️ | ✖️ | ✖️ |
+| Compiler | Status | __builtin_embed | __builtin_embed_n | #embed | #embed_str |
+|:--------:|:----------------------------------------------------------------------------:|:---------------:|:-----------------:|:-------:|:----------:|
+| GCC | [Patchable, Needs Tests](https://github.com/ThePhD/gcc/tree/feature/embed) |  ✔️ | ✔️ | ✔️ | ✔️ |
+| Clang | [WIP, Needs Help](https://github.com/ThePhD/llvm-project/tree/feature/embed) |  🔧 WIP 🔧 |  🔧 WIP 🔧 |  🔧 WIP 🔧  |  🔧 WIP 🔧 |
+| MSVC | ✖️ | ✖️ | ✖️ | ✖️ | ✖️ |
 
 
 ## Usage
