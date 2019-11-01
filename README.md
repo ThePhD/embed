@@ -158,7 +158,6 @@ int main () {
 `main.c`:
 ```c
 #include <assert.h>
-#include <stdbool.h>
 
 int main () {
 	const char data[] =
