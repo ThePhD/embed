@@ -44,7 +44,7 @@ namespace phd {
 
 }
 
-#elif defined(PHD_EMBED_HAS_BUILTIN_EMBED) && (PHD_HAS_BUILTIN_EMBED != 0)
+#elif defined(PHD_EMBED_HAS_BUILTIN_EMBED) && (PHD_EMBED_HAS_BUILTIN_EMBED != 0)
 
 #include <cstddef>
 #include <span>
