@@ -48,6 +48,7 @@ namespace phd {
 
 #include <cstddef>
 #include <span>
+#inclue <string_view>
 
 namespace phd {
 
