@@ -17,22 +17,14 @@
 #pragma once
 
 #if defined(__has_include)
-#if __has_include(<version>)
+#if !defined(PHD_EMBED_HAS_INCLUDE)
+#define PHD_EMBED_HAS_INCLUDE(HEADER_TOKEN) __has_include(HEADER_TOKEN)
+#endif // undefined PHD_EMBED_HAS_INCLUDE
+#endif __has_include ability
+
+#if defined(PHD_EMBED_HAS_INCLUDE) && (PHD_EMBED_HAS_INCLUDE(<version>))
 #include <version>
-#endif
-#endif
-
-#ifdef __cpp_lib_embed
-
-#include <embed>
-
-namespace phd {
-
-	using embed = std::embed;
-
-}
-
-#else
+#endif // __has_include ability
 
 #if !defined(PHD_EMBED_HAS_BUILTIN_EMBED)
 #if defined(__has_builtin)
@@ -42,7 +34,17 @@ namespace phd {
 #endif // __has_builtin test
 #endif // undefined PHD_EMBED_HAS_BUILTIN_EMBED
 
-#if defined(PHD_EMBED_HAS_BUILTIN_EMBED) && (PHD_HAS_BUILTIN_EMBED != 0)
+#if defined(__cpp_lib_embed) || (defined(PHD_EMBED_HAS_INCLUDE) && PHD_EMBED_HAS_INCLUDE(<embed>))
+
+#include <embed>
+
+namespace phd {
+
+	using embed = std::embed;
+
+}
+
+#elif defined(PHD_EMBED_HAS_BUILTIN_EMBED) && (PHD_HAS_BUILTIN_EMBED != 0)
 
 #include <cstddef>
 #include <span>
@@ -65,8 +67,6 @@ namespace phd {
 
 #else
 #error "This compiler does not support the required __builtin_embed/__builtin_embed_n functions"
-#endif // __has_builtin(__builtin_embed)
-
-#endif // __cpp_lib_embed from <version>
+#endif // __cpp_lib_embed from <version> || __has_builtin(__builtin_embed)
 
 #endif // PHD_EMBED_EMBED_HPP
