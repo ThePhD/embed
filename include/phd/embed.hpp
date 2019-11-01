@@ -20,11 +20,11 @@
 #if !defined(PHD_EMBED_HAS_INCLUDE)
 #define PHD_EMBED_HAS_INCLUDE(HEADER_TOKEN) __has_include(HEADER_TOKEN)
 #endif // undefined PHD_EMBED_HAS_INCLUDE
-#endif __has_include ability
+#endif // __has_include ability
 
 #if defined(PHD_EMBED_HAS_INCLUDE) && (PHD_EMBED_HAS_INCLUDE(<version>))
 #include <version>
-#endif // __has_include ability
+#endif // <version> check
 
 #if !defined(PHD_EMBED_HAS_BUILTIN_EMBED)
 #if defined(__has_builtin)
@@ -66,7 +66,9 @@ namespace phd {
 } // namespace phd
 
 #else
+
 #error "This compiler does not support the required __builtin_embed/__builtin_embed_n functions"
+
 #endif // __cpp_lib_embed from <version> || __has_builtin(__builtin_embed)
 
 #endif // PHD_EMBED_EMBED_HPP
