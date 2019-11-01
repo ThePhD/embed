@@ -7,11 +7,21 @@ CC0.
 | Compiler | Status | __builtin_embed | __builtin_embed_n | #embed | #embed_str |
 |:--------:|:----------------------------------------------------------------------------:|:---------------:|:-----------------:|:-------:|:----------:|
 | GCC | [Patchable, Needs Tests](https://github.com/ThePhD/gcc/tree/feature/embed) |  ✔️ | ✔️ | ✔️ | ✔️ |
-| Clang | [WIP, Needs Help](https://github.com/ThePhD/llvm-project/tree/feature/embed) |  🔧 WIP 🔧 |  🔧 WIP 🔧 |  🔧 WIP 🔧  |  🔧 WIP 🔧 |
+| Clang | [WIP, Needs Help](https://github.com/ThePhD/llvm-project/tree/feature/embed) |  🔧 WIP 🔧 |  🔧 WIP 🔧 |  ✔️  |  ✔️ |
 | MSVC | ✖️ | ✖️ | ✖️ | ✖️ | ✖️ |
 
 
 ## Usage
+
+Filesystem:
+
+```bash
+- 📁 bar
+- 📂 baz
+  |-- 📄 art.txt
+- 📄 foo.txt
+- 💻 main.cpp
+```
 
 Files:
 
@@ -33,16 +43,6 @@ Foo
                      |||  |||
 
 
-```
-
-Filesystem:
-
-```bash
-- 📁 bar
-- 📂 baz
-  |-- 📄 art.txt
-- 📄 foo.txt
-- 💻 main.cpp
 ```
 
 ### Library Function
