@@ -16,7 +16,7 @@
 
 #pragma once
 
-#ifdef __has_include
+#if defined(__has_include)
 #if __has_include(<version>)
 #include <version>
 #endif
@@ -35,14 +35,14 @@ namespace phd {
 #else
 
 #if !defined(PHD_EMBED_HAS_BUILTIN_EMBED)
-#ifdef __has_builtin
+#if defined(__has_builtin)
 #if __has_builtin(__builtin_embed) && __has_builtin(__builtin_embed_n)
 #define  PHD_EMBED_HAS_BUILTIN_EMBED 1
 #endif
 #endif // __has_builtin test
 #endif // undefined PHD_EMBED_HAS_BUILTIN_EMBED
 
-#if defined(PHD_EMBED_HAS_BUILTIN_EMBED) && (PHD_HAS_BUILTIN_EMBED != 0))
+#if defined(PHD_EMBED_HAS_BUILTIN_EMBED) && (PHD_HAS_BUILTIN_EMBED != 0)
 
 #include <cstddef>
 #include <span>
