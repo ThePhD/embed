@@ -63,6 +63,8 @@ namespace phd {
 
 } // namespace phd
 
+#else
+#error "This compiler does not support the required __builtin_embed/__builtin_embed_n functions"
 #endif // __has_builtin(__builtin_embed)
 
 #endif // __cpp_lib_embed from <version>
