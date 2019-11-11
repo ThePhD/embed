@@ -139,12 +139,14 @@ int main () {
 #include <assert.h>
 #include <stdbool.h>
 
+#define ARRAY_SIZE(x) (sizeof(arr_val) / sizeof(arr_val[0]))
+
 int main () {
 	const char data[] =
 #embed "art.txt"
 	;
 
-	const int size = sizeof(data) / sizeof(*data);
+	const int size = ARRAY_SIZE(data);
 	bool is_null_terminated = data[size - 1] == '\0';
 	assert(not is_null_terminated);
 
@@ -159,12 +161,14 @@ int main () {
 ```c
 #include <assert.h>
 
+#define ARRAY_SIZE(x) (sizeof(arr_val) / sizeof(arr_val[0]))
+
 int main () {
 	const char data[] =
 #embed 4 "/dev/urandom"
 	;
 
-	assert(size == 4);
+	assert(ARRAY_SIZE(data) == 4);
 
 	// ¯\_(ツ)_/¯
 	return data[0];
