@@ -74,17 +74,11 @@ target_include_directories(phd.embed INTERFACE
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  
 	$<INSTALL_INTERFACE:include>
 )
-if (PHD_EMBED_IS_TOP_LEVEL_PROJECT)
-	if (MSVC)
-		target_compile_options(phd.embed INTERFACE 
-			/std:c++latest
-			/permissive-
-		)
-	else()
-		target_compile_options(phd.embed INTERFACE 
-			-std=c++2a
-		)
-	endif()
+if (NOT MSVC)
+	target_compile_options(phd.embed INTERFACE 
+		-fembed
+		-fembed-builtins
+	)
 endif()
 
 target_sources(phd.embed INTERFACE ${phd.embed.sources})
