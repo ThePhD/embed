@@ -57,7 +57,7 @@ namespace phd {
 namespace phd {
 
 	template <typename _Ty = std::byte, typename... _Args>
-	inline constexpr ::std::span<const _Ty> embed (::std::string_view __resource_name, _Args&&.. __args) noexcept {
+	inline constexpr ::std::span<const _Ty> embed (::std::string_view __resource_name, _Args&&... __args) noexcept {
 		static_assert(sizeof(_Ty) == 1 && std::is_trivial_v<_Ty>, "Type must have sizeof(T) == 1, and std::is_trivial_v<T> must be true");
 		static_assert(sizeof...(_Args) <= 1, "Can only specify 1 additional argument as the maximum potential number of bytes.");
 		const _Ty* __res = nullptr;
