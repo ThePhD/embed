@@ -5,10 +5,10 @@ The library portion of [P1040](https://thephd.github.io/vendor/future_cxx/papers
 CC0.
 
 | Compiler | Status | __builtin_embed | #embed | #embed_str |
-|:--------:|:----------------------------------------------------------------------------:|:---------------:|:-----------------:|:-------:|:----------:|
-| GCC | [Patchable, Needs Tests](https://github.com/ThePhD/gcc/tree/feature/embed) |  ✔️ | ✔️ | ✔️ |
-| Clang | [WIP, Needs Help](https://github.com/ThePhD/llvm-project/tree/feature/embed) |  🔧 WIP 🔧 |  🔧 WIP 🔧 |  ✔️ |
-| MSVC | ✖️ | ✖️ | ✖️ | ✖️ | ✖️ |
+|:--------:|:----------------------------------------------------------------------------:|:---------------:|:-------:|:----------:|
+| GCC | [Patchable, Needs Tests](https://github.com/ThePhD/gcc/tree/feature/embed) |  ✔️ |  ✔️  |  ✔️  |
+| Clang | [WIP, Needs Help](https://github.com/ThePhD/llvm-project/tree/feature/embed) |  🔧 WIP 🔧  |   ✔️   |  ✔️  |
+| MSVC | ✖️ | ✖️ | ✖️ | ✖️ |
 
 
 ## Usage
