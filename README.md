@@ -4,12 +4,17 @@ The library portion of [P1040](https://thephd.github.io/vendor/future_cxx/papers
 
 CC0.
 
+Available on Compiler Explorer ([e.g. 1](https://godbolt.org/z/HLTuci), [e.g. 2](https://godbolt.org/z/pZeQcv)), courtesy of the help of the blessed Matt Godbolt.
+
 | Compiler | Status | __builtin_embed | #embed | #embed_str |
 |:--------:|:----------------------------------------------------------------------------:|:---------------:|:-------:|:----------:|
 | GCC | [Patchable, Needs Tests](https://github.com/ThePhD/gcc/tree/feature/embed) |  ✔️ |  ✔️  |  ✔️  |
 | Clang | [WIP, Needs Help](https://github.com/ThePhD/llvm-project/tree/feature/embed) |  🔧 WIP 🔧  |   ✔️   |  ✔️  |
 | MSVC | ✖️ | ✖️ | ✖️ | ✖️ |
 
+GCC: Optimized `#embed` and `#embed_str`. `__builtin_embed` works with templated outputs.
+Clang: Unoptimized `#embed` and `#embed_str`. `__builtin_embed` needs to figure out the 2 lines of arcana to make it work.
+MSVC: I can't propose features to that compiler. ¯\_(ツ)_/¯
 
 ## Usage
 
