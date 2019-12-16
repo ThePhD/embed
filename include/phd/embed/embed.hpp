@@ -62,12 +62,26 @@ namespace phd {
 		static_assert(sizeof...(_Args) <= 1, "Can only specify 1 additional argument as the maximum potential number of bytes.");
 		const _Ty* __res = nullptr;
 		// always returns # of bytes
-		size_t __res_len = __builtin_embed(__resource_name.size(), __resource_name.data(), ::std::forward<_Args>(__args)..., &__res);
+		size_t __res_len = __builtin_embed(__resource_name.size(), __resource_name.data(), false, ::std::forward<_Args>(__args)..., &__res);
 #if defined(PHD_EMBED_CHECK_TYPE_SIZE) && (PHD_EMBED_CHECK_TYPE_SIZE != 0)	
-		assert((sizeof(_Ty) == 1 || (__res_len % sizeof(_Ty) == 0) && "Returned a number of bytes unsuitable for the type specified...");
+		assert((sizeof(_Ty) == 1 || (__res_len % sizeof(_Ty) == 0)) && "Returned a number of bytes unsuitable for the type specified...");
 #endif // Ensure no partial serializations...
 		return {__res, (__res_len / sizeof(_Ty))};
 	}
+
+	template <typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty> embed_str (::std::string_view __resource_name, _Args&&... __args) noexcept {
+		static_assert(sizeof(_Ty) == 1 && std::is_trivial_v<_Ty>, "Type must have sizeof(T) == 1, and std::is_trivial_v<T> must be true");
+		static_assert(sizeof...(_Args) <= 1, "Can only specify 1 additional argument as the maximum potential number of bytes.");
+		const _Ty* __res = nullptr;
+		// always returns # of bytes
+		size_t __res_len = __builtin_embed(__resource_name.size(), __resource_name.data(), true, ::std::forward<_Args>(__args)..., &__res);
+#if defined(PHD_EMBED_CHECK_TYPE_SIZE) && (PHD_EMBED_CHECK_TYPE_SIZE != 0)	
+		assert((sizeof(_Ty) == 1 || (__res_len % sizeof(_Ty) == 0)) && "Returned a number of bytes unsuitable for the type specified...");
+#endif // Ensure no partial serializations...
+		return {__res, (__res_len / sizeof(_Ty))};
+	}
+	
 } // namespace phd
 
 #else
