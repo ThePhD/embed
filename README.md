@@ -179,3 +179,87 @@ int main () {
 	return data[0];
 }
 ```
+
+
+
+# Speed Results
+
+- Intel Core i7 @ 2.60 GHz
+- 24.0 GB RAM
+- Debian Sid or Windows 10
+- Method: Gather timings from `time` *nix program | `Measure-Command { ... }` PowerShell, average
+
+| Strategy              |     4 bytes    |   40 bytes    |   400 bytes   |  4 kilobytes  |
+|-----------------------|----------------|---------------|---------------|---------------|
+| `#embed` GCC          |     0.201 s    |     0.208 s   |     0.207 s   |    0.218 s    |
+| `phd::embed` GCC      |     0.709 s    |     0.724 s   |     0.711 s   |    0.715 s    |
+| `xxd`-generated GCC   |     0.225 s    |     0.215 s   |     0.237 s   |    0.247 s    |
+| `xxd`-generated Clang |     0.272 s    |     0.275 s   |     0.272 s   |    0.272 s    |
+| `xxd`-generated MSVC  |     0.204 s    |     0.229 s   |     0.209 s   |    0.232 s    |
+| Circle `@array`       |     0.353 s    |     0.359 s   |     0.361 s   |    0.361 s    |
+| Circle `@embed`       |     0.199 s    |     0.208 s   |     0.204 s   |    0.368 s    |
+| `objcopy` (linker)    |     0.501 s    |     0.482 s   |     0.519 s   |    0.527 s    |
+
+| Strategy              |  40 kilobytes  | 400 kilobytes |  4 megabytes  |  40 megabytes |
+|-----------------------|----------------|---------------|---------------|---------------|
+| `#embed` GCC          |     0.236 s    |    0.231 s    |     0.300 s   |     1.069 s   |
+| `phd::embed` GCC      |     0.705 s    |    0.713 s    |     0.772 s   |     1.135 s   |
+| `xxd`-generated GCC   |     0.406 s    |    2.135 s    |    23.567 s   |   225.290 s   |
+| `xxd`-generated Clang |     0.366 s    |    1.063 s    |     8.309 s   |    83.250 s   |
+| `xxd`-generated MSVC  |     0.552 s    |    3.806 s    |    52.397 s   | Out of Memory |
+| Circle `@array`       |     0.353 s    |    0.363 s    |     0.421 s   |     0.585 s   |
+| Circle `@embed`       |     0.238 s    |    0.199 s    |     0.219 s   |     0.368 s   |
+| `objcopy` (linker)    |     0.500 s    |    0.497 s    |     0.555 s   |     2.183 s   |
+
+| Strategy              |              400 megabytes               |                1 gigabyte                 |
+|-----------------------|------------------------------------------|-------------------------------------------|
+| `#embed` GCC          |                 9.803 s                  |                 26.383 s                  |
+| `phd::embed` GCC      |                 4.170 s                  |                 11.887 s                  |
+| `xxd`-generated GCC   |             Out of Memory                |               Out of Memory               |
+| `xxd`-generated Clang |             Out of Memory                |               Out of Memory               |
+| `xxd`-generated MSVC  |             Out of Memory                |               Out of Memory               |
+| Circle `@array`       |                 2.655 s                  |                  6.023 s                  |
+| Circle `@embed`       |                 1.886 s                  |                  4.762 s                  |
+| `objcopy` (linker)    |                22.654 s                  |                 58.204 s                  |
+
+
+
+# Memory Size Results
+
+- Intel Core i7 @ 2.60 GHz
+- 24.0 GB RAM
+- Debian Sid or Windows 10
+- Method: Execute command hundreds of times, stare extremely hard at `htop` | Task Manager
+
+| Strategy              |     4 bytes    |   40 bytes    |   400 bytes   |  4 kilobytes  |
+|-----------------------|----------------|---------------|---------------|---------------|
+| `#embed` GCC          |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+| `phd::embed` GCC      |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+| `xxd`-generated GCC   |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+| `xxd`-generated Clang |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+| `xxd`-generated MSVC  |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+| Circle `@array`       |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+| Circle `@embed`       |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+| `objcopy` (linker)    |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+
+| Strategy              |  40 kilobytes  | 400 kilobytes |  4 megabytes  |  40 megabytes |
+|-----------------------|----------------|---------------|---------------|---------------|
+| `#embed` GCC          |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+| `phd::embed` GCC      |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+| `xxd`-generated GCC   |    ~24.67 MB   |  ~106.20 MB   |  ~1,414 MB    |  ~12,300 MB   |
+| `xxd`-generated Clang |    ~34.60 MB   |   ~97.98 MB   |    ~680 MB    |   ~6,807 MB   |
+| `xxd`-generated MSVC  |    ~48.60 MB   |  ~477.30 MB   |  ~5,280 MB    | Out of Memory |
+| Circle `@array`       |                |               |               |               |
+| Circle `@embed`       |                |               |               |               |
+| `objcopy` (linker)    |                |               |               |               |
+
+| Strategy              |               400 megabytes              |                1 gigabyte                 |
+|-----------------------|------------------------------------------|-------------------------------------------|
+| `#embed` GCC          |                                          |                                           |
+| `phd::embed` GCC      |                                          |                                           |
+| `xxd`-generated GCC   |             Out of Memory                |               Out of Memory               |
+| `xxd`-generated Clang |             Out of Memory                |               Out of Memory               |
+| `xxd`-generated MSVC  |             Out of Memory                |               Out of Memory               |
+| Circle `@array`       |                                          |                                           |
+| Circle `@embed`       |                                          |                                           |
+| `objcopy` (linker)    |                                          |                                           |
