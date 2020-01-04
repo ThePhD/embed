@@ -184,6 +184,8 @@ int main () {
 
 # Speed Results
 
+Below are timing results for a file of random bytes using a specific strategy. The file is of the size specified at the top of the column. Files are kept the same between strategies and tests.
+
 - Intel Core i7 @ 2.60 GHz
 - 24.0 GB RAM
 - Debian Sid or Windows 10
@@ -226,37 +228,39 @@ int main () {
 
 # Memory Size Results
 
+Below is the peak memory usage (heap usage) for a file of random bytes using a specific strategy. The file is of the size specified at the top of the column. Files are kept the same between strategies and tests.
+
 - Intel Core i7 @ 2.60 GHz
 - 24.0 GB RAM
 - Debian Sid or Windows 10
-- Method: Execute command hundreds of times, stare extremely hard at `htop` | Task Manager
+- Method: `/usr/bin/time -v` or Execute command hundreds of times, stare at Task Manager
 
 | Strategy              |     4 bytes    |   40 bytes    |   400 bytes   |  4 kilobytes  |
 |-----------------------|----------------|---------------|---------------|---------------|
-| `#embed` GCC          |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
-| `phd::embed` GCC      |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
-| `xxd`-generated GCC   |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
-| `xxd`-generated Clang |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
-| `xxd`-generated MSVC  |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
-| Circle `@array`       |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
-| Circle `@embed`       |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
-| `objcopy` (linker)    |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
+| `#embed` GCC          |    17.26 MB    |    17.26 MB   |    17.26 MB   |    17.27 MB   |
+| `phd::embed` GCC      |    38.82 MB    |    38.77 MB   |    38.80 MB   |    38.80 MB   |
+| `xxd`-generated GCC   |    17.26 MB    |    17.26 MB   |    17.26 MB   |    17.27 MB   |
+| `xxd`-generated Clang |    35.12 MB    |    35.22 MB   |    35.31 MB   |    35.88 MB   |
+| `xxd`-generated MSVC  |  < 30.00 MB    |  < 30.00 MB   |  < 33.00 MB   |  < 38.00 MB   |
+| Circle `@array`       |                |               |               |               |
+| Circle `@embed`       |                |               |               |               |
+| `objcopy` (linker)    |                |               |               |               |
 
 | Strategy              |  40 kilobytes  | 400 kilobytes |  4 megabytes  |  40 megabytes |
 |-----------------------|----------------|---------------|---------------|---------------|
-| `#embed` GCC          |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
-| `phd::embed` GCC      |    Too Fast    |    Too Fast   |    Too Fast   |    Too Fast   |
-| `xxd`-generated GCC   |    ~24.67 MB   |  ~106.20 MB   |  ~1,414 MB    |  ~12,300 MB   |
-| `xxd`-generated Clang |    ~34.60 MB   |   ~97.98 MB   |    ~680 MB    |   ~6,807 MB   |
-| `xxd`-generated MSVC  |    ~48.60 MB   |  ~477.30 MB   |  ~5,280 MB    | Out of Memory |
+| `#embed` GCC          |    17.26 MB    |    17.96 MB   |     53.42 MB  |    341.72 MB  |
+| `phd::embed` GCC      |    38.80 MB    |    40.10 MB   |     59.06 MB  |    208.52 MB  |
+| `xxd`-generated GCC   |    24.85 MB    |   134.34 MB   |  1,347.00 MB  | 12,622.00 MB  |
+| `xxd`-generated Clang |    41.83 MB    |   103.76 MB   |    718.00 MB  |  7,116.00 MB  |
+| `xxd`-generated MSVC  |    ~48.60 MB   |  ~477.30 MB   | ~5,280.00 MB  | Out of Memory |
 | Circle `@array`       |                |               |               |               |
 | Circle `@embed`       |                |               |               |               |
 | `objcopy` (linker)    |                |               |               |               |
 
 | Strategy              |               400 megabytes              |                1 gigabyte                 |
 |-----------------------|------------------------------------------|-------------------------------------------|
-| `#embed` GCC          |                                          |                                           |
-| `phd::embed` GCC      |                                          |                                           |
+| `#embed` GCC          |               3,995.34 MB                |                 9,795.31 MB               |
+| `phd::embed` GCC      |               1,494.66 MB                |                 5,279.37 MB               |
 | `xxd`-generated GCC   |             Out of Memory                |               Out of Memory               |
 | `xxd`-generated Clang |             Out of Memory                |               Out of Memory               |
 | `xxd`-generated MSVC  |             Out of Memory                |               Out of Memory               |
