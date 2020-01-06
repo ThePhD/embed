@@ -213,16 +213,16 @@ Below are timing results for a file of random bytes using a specific strategy. T
 | Circle `@embed`       |     0.238 s    |    0.199 s    |     0.219 s   |     0.368 s   |
 | `objcopy` (linker)    |     0.500 s    |    0.497 s    |     0.555 s   |     2.183 s   |
 
-| Strategy              |              400 megabytes               |                1 gigabyte                 |
-|-----------------------|------------------------------------------|-------------------------------------------|
-| `#embed` GCC          |                 9.803 s                  |                 26.383 s                  |
-| `phd::embed` GCC      |                 4.170 s                  |                 11.887 s                  |
-| `xxd`-generated GCC   |             Out of Memory                |               Out of Memory               |
-| `xxd`-generated Clang |             Out of Memory                |               Out of Memory               |
-| `xxd`-generated MSVC  |             Out of Memory                |               Out of Memory               |
-| Circle `@array`       |                 2.655 s                  |                  6.023 s                  |
-| Circle `@embed`       |                 1.886 s                  |                  4.762 s                  |
-| `objcopy` (linker)    |                22.654 s                  |                 58.204 s                  |
+| Strategy              |    400 megabytes   |     1 gigabyte      |
+|-----------------------|--------------------|---------------------|
+| `#embed` GCC          |       9.803 s      |      26.383 s       |
+| `phd::embed` GCC      |       4.170 s      |      11.887 s       |
+| `xxd`-generated GCC   |   Out of Memory    |    Out of Memory    |
+| `xxd`-generated Clang |   Out of Memory    |    Out of Memory    |
+| `xxd`-generated MSVC  |   Out of Memory    |    Out of Memory    |
+| Circle `@array`       |       2.655 s      |       6.023 s       |
+| Circle `@embed`       |       1.886 s      |       4.762 s       |
+| `objcopy` (linker)    |      22.654 s      |      58.204 s       |
 
 
 
@@ -242,9 +242,9 @@ Below is the peak memory usage (heap usage) for a file of random bytes using a s
 | `xxd`-generated GCC   |    17.26 MB    |    17.26 MB   |    17.26 MB   |    17.27 MB   |
 | `xxd`-generated Clang |    35.12 MB    |    35.22 MB   |    35.31 MB   |    35.88 MB   |
 | `xxd`-generated MSVC  |  < 30.00 MB    |  < 30.00 MB   |  < 33.00 MB   |  < 38.00 MB   |
-| Circle `@array`       |                |               |               |               |
-| Circle `@embed`       |                |               |               |               |
-| `objcopy` (linker)    |                |               |               |               |
+| Circle `@array`       |    53.56 MB    |    53.60 MB   |    53.53 MB   |    53.88 MB   |
+| Circle `@embed`       |    33.35 MB    |    33.34 MB   |    33.34 MB   |    33.35 MB   |
+| `objcopy` (linker)    |    17.32 MB    |    17.31 MB   |    17.31 MB   |    17.31 MB   |
 
 | Strategy              |  40 kilobytes  | 400 kilobytes |  4 megabytes  |  40 megabytes |
 |-----------------------|----------------|---------------|---------------|---------------|
@@ -252,18 +252,18 @@ Below is the peak memory usage (heap usage) for a file of random bytes using a s
 | `phd::embed` GCC      |    38.80 MB    |    40.10 MB   |     59.06 MB  |    208.52 MB  |
 | `xxd`-generated GCC   |    24.85 MB    |   134.34 MB   |  1,347.00 MB  | 12,622.00 MB  |
 | `xxd`-generated Clang |    41.83 MB    |   103.76 MB   |    718.00 MB  |  7,116.00 MB  |
-| `xxd`-generated MSVC  |    ~48.60 MB   |  ~477.30 MB   | ~5,280.00 MB  | Out of Memory |
-| Circle `@array`       |                |               |               |               |
-| Circle `@embed`       |                |               |               |               |
-| `objcopy` (linker)    |                |               |               |               |
+| `xxd`-generated MSVC  |   ~48.60 MB    |  ~477.30 MB   | ~5,280.00 MB  | Out of Memory |
+| Circle `@array`       |    53.69 MB    |    54.73 MB   |     65.88 MB  |    176.44 MB  |
+| Circle `@embed`       |    33.34 MB    |    33.34 MB   |     39.41 MB  |    113.12 MB  |
+| `objcopy` (linker)    |    17.31 MB    |    17.31 MB   |     17.31 MB  |     57.13 MB  |
 
-| Strategy              |               400 megabytes              |                1 gigabyte                 |
-|-----------------------|------------------------------------------|-------------------------------------------|
-| `#embed` GCC          |               3,995.34 MB                |                 9,795.31 MB               |
-| `phd::embed` GCC      |               1,494.66 MB                |                 5,279.37 MB               |
-| `xxd`-generated GCC   |             Out of Memory                |               Out of Memory               |
-| `xxd`-generated Clang |             Out of Memory                |               Out of Memory               |
-| `xxd`-generated MSVC  |             Out of Memory                |               Out of Memory               |
-| Circle `@array`       |                                          |                                           |
-| Circle `@embed`       |                                          |                                           |
-| `objcopy` (linker)    |                                          |                                           |
+| Strategy              |    400 megabytes    |      1 gigabyte     |
+|-----------------------|---------------------|---------------------|
+| `#embed` GCC          |     3,995.34 MB     |      9,795.31 MB    |
+| `phd::embed` GCC      |     1,494.66 MB     |      5,279.37 MB    |
+| `xxd`-generated GCC   |    Out of Memory    |     Out of Memory   |
+| `xxd`-generated Clang |    Out of Memory    |     Out of Memory   |
+| `xxd`-generated MSVC  |    Out of Memory    |     Out of Memory   |
+| Circle `@array`       |     1,282.34 MB     |      3,199.28 MB    |
+| Circle `@embed`       |       850.40 MB     |      2,128.36 MB    |
+| `objcopy` (linker)    |       425.77 MB     |      1,064.74 MB    |
