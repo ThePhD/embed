@@ -12,9 +12,10 @@ Available on Compiler Explorer ([e.g. 1](https://godbolt.org/z/HLTuci), [e.g. 2]
 | Clang | [WIP, Needs Help](https://github.com/ThePhD/llvm-project/tree/feature/embed) |  🔧 WIP 🔧  |   ✔️   |  ✔️  |
 | MSVC | ✖️ | ✖️ | ✖️ | ✖️ |
 
-GCC: Optimized `#embed` and `#embed_str`. `__builtin_embed` works with templated outputs.
-Clang: Unoptimized `#embed` and `#embed_str`. `__builtin_embed` needs to figure out the 2 lines of arcana to make it work.
-MSVC: I can't propose features to that compiler. ¯\_(ツ)_/¯
+GCC Progress: Optimized `#embed` and `#embed_str`. `__builtin_embed` works with templated outputs.  
+Clang Progress: Unoptimized `#embed` and `#embed_str`. `__builtin_embed` needs to figure out the 2 lines of arcana to make it work.  
+MSVC Progress: I can't propose features to that compiler. ¯\_(ツ)_/¯
+
 
 ## Usage
 
@@ -49,6 +50,7 @@ Foo
 
 
 ```
+
 
 ### Library Function
 
@@ -118,6 +120,7 @@ int main () {
 }
 
 ```
+
 
 ### Preprocessor
 
