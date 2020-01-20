@@ -1,0 +1,14 @@
+#version 330 core
+
+uniform vec2 Texture0Size;
+uniform vec2 Texture0PixelSize;
+uniform sampler2D Texture0;
+
+in vec4 position;
+in vec2 tex;
+in vec4 color;
+out vec4 pixel_color;
+
+void main(  ) {
+	pixel_color = color;
+}

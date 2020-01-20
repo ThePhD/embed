@@ -6,15 +6,25 @@ CC0.
 
 Available on Compiler Explorer ([e.g. 1](https://godbolt.org/z/HLTuci), [e.g. 2](https://godbolt.org/z/pZeQcv)), courtesy of the help of the blessed Matt Godbolt.
 
-| Compiler | Status | __builtin_embed | #embed | #embed_str |
-|:--------:|:----------------------------------------------------------------------------:|:---------------:|:-------:|:----------:|
-| GCC | [Patchable, Needs Tests](https://github.com/ThePhD/gcc/tree/feature/embed) |  ✔️ |  ✔️  |  ✔️  |
-| Clang | [WIP, Needs Help](https://github.com/ThePhD/llvm-project/tree/feature/embed) |  🔧 WIP 🔧  |   ✔️   |  ✔️  |
-| MSVC | ✖️ | ✖️ | ✖️ | ✖️ |
+| Compiler | Status | __builtin_embed | #embed | #embed_str | #depend |
+|:--------:|:----------------------------------------------------------------------------:|:---------------:|:-------:|:----------:|:----------:|
+| GCC | [Patchable, See Below](https://github.com/ThePhD/gcc/tree/feature/embed) |  ✔️ |  ✔️  |  ✔️  |  ✔️  |
+| Clang | [Patchable, See Below](https://github.com/ThePhD/llvm-project/tree/feature/embed) |  ✔️  |  ✔️  |  ✔️  |  ✔️  |
+| MSVC | ✖️ | ✖️ | ✖️ | ✖️ | ✖️ |
 
-GCC Progress: Optimized `#embed` and `#embed_str`. `__builtin_embed` works with templated outputs.  
-Clang Progress: Unoptimized `#embed` and `#embed_str`. `__builtin_embed` needs to figure out the 2 lines of arcana to make it work.  
-MSVC Progress: I can't propose features to that compiler. ¯\_(ツ)_/¯
+- [x] GCC Progress:
+  - [x] Optimized `#embed` and `#embed_str`.
+  - [x] `__builtin_embed` works.
+  - [ ] `#depend` works, but needs recursive directory iteration for dep files.
+  - [x] Tests completed.  
+- [x] Clang Progress:
+  - [x] Optimized `#embed` and `#embed_str`.
+  - [x] `__builtin_embed` works.
+  - [x] `#depend` works.
+  - [ ] Needs special `APValue` representation to not bloat memory for constant folding / constant evaluations.
+  - [ ] Needs tests.  
+- [ ] MSVC Progress:
+  - I can't propose features to that compiler. `¯\_(ツ)_/¯`
 
 
 ## Usage
@@ -197,7 +207,9 @@ Below are timing results for a file of random bytes using a specific strategy. T
 | Strategy              |     4 bytes    |   40 bytes    |   400 bytes   |  4 kilobytes  |
 |-----------------------|----------------|---------------|---------------|---------------|
 | `#embed` GCC          |     0.201 s    |     0.208 s   |     0.207 s   |    0.218 s    |
+| `#embed` Clang        |     0.290 s    |     0.200 s   |     0.270 s   |    0.180 s    |
 | `phd::embed` GCC      |     0.709 s    |     0.724 s   |     0.711 s   |    0.715 s    |
+| `phd::embed` Clang    |     0.740 s    |     0.800 s   |     0.750 s   |    0.810 s    |
 | `xxd`-generated GCC   |     0.225 s    |     0.215 s   |     0.237 s   |    0.247 s    |
 | `xxd`-generated Clang |     0.272 s    |     0.275 s   |     0.272 s   |    0.272 s    |
 | `xxd`-generated MSVC  |     0.204 s    |     0.229 s   |     0.209 s   |    0.232 s    |
@@ -208,7 +220,9 @@ Below are timing results for a file of random bytes using a specific strategy. T
 | Strategy              |  40 kilobytes  | 400 kilobytes |  4 megabytes  |  40 megabytes |
 |-----------------------|----------------|---------------|---------------|---------------|
 | `#embed` GCC          |     0.236 s    |    0.231 s    |     0.300 s   |     1.069 s   |
+| `#embed` Clang        |     0.260 s    |    0.300 s    |     1.270 s   |     7.810 s   |
 | `phd::embed` GCC      |     0.705 s    |    0.713 s    |     0.772 s   |     1.135 s   |
+| `phd::embed` Clang    |     0.760 s    |    0.790 s    |     0.850 s   |     1.070 s   |
 | `xxd`-generated GCC   |     0.406 s    |    2.135 s    |    23.567 s   |   225.290 s   |
 | `xxd`-generated Clang |     0.366 s    |    1.063 s    |     8.309 s   |    83.250 s   |
 | `xxd`-generated MSVC  |     0.552 s    |    3.806 s    |    52.397 s   | Out of Memory |
@@ -219,7 +233,9 @@ Below are timing results for a file of random bytes using a specific strategy. T
 | Strategy              |    400 megabytes   |     1 gigabyte      |
 |-----------------------|--------------------|---------------------|
 | `#embed` GCC          |       9.803 s      |      26.383 s       |
+| `#embed` Clang        |   Out of Memory    |    Out of Memory    |
 | `phd::embed` GCC      |       4.170 s      |      11.887 s       |
+| `phd::embed` Clang    |       3.790 s      |       8.180 s       |
 | `xxd`-generated GCC   |   Out of Memory    |    Out of Memory    |
 | `xxd`-generated Clang |   Out of Memory    |    Out of Memory    |
 | `xxd`-generated MSVC  |   Out of Memory    |    Out of Memory    |
@@ -241,7 +257,9 @@ Below is the peak memory usage (heap usage) for a file of random bytes using a s
 | Strategy              |     4 bytes    |   40 bytes    |   400 bytes   |  4 kilobytes  |
 |-----------------------|----------------|---------------|---------------|---------------|
 | `#embed` GCC          |    17.26 MB    |    17.26 MB   |    17.26 MB   |    17.27 MB   |
+| `#embed` Clang        |    23.08 MB    |    23.02 MB   |    23.08 MB   |    23.37 MB   |
 | `phd::embed` GCC      |    38.82 MB    |    38.77 MB   |    38.80 MB   |    38.80 MB   |
+| `phd::embed` Clang    |    58.38 MB    |    58.39 MB   |    58.37 MB   |    58.40 MB   |
 | `xxd`-generated GCC   |    17.26 MB    |    17.26 MB   |    17.26 MB   |    17.27 MB   |
 | `xxd`-generated Clang |    35.12 MB    |    35.22 MB   |    35.31 MB   |    35.88 MB   |
 | `xxd`-generated MSVC  |  < 30.00 MB    |  < 30.00 MB   |  < 33.00 MB   |  < 38.00 MB   |
@@ -252,7 +270,9 @@ Below is the peak memory usage (heap usage) for a file of random bytes using a s
 | Strategy              |  40 kilobytes  | 400 kilobytes |  4 megabytes  |  40 megabytes |
 |-----------------------|----------------|---------------|---------------|---------------|
 | `#embed` GCC          |    17.26 MB    |    17.96 MB   |     53.42 MB  |    341.72 MB  |
+| `#embed` Clang        |    26.13 MB    |    53.73 MB   |    369.10 MB  |  3,529.94 MB  |
 | `phd::embed` GCC      |    38.80 MB    |    40.10 MB   |     59.06 MB  |    208.52 MB  |
+| `phd::embed` Clang    |    58.43 MB    |    59.19 MB   |     66.58 MB  |    172.94 MB  |
 | `xxd`-generated GCC   |    24.85 MB    |   134.34 MB   |  1,347.00 MB  | 12,622.00 MB  |
 | `xxd`-generated Clang |    41.83 MB    |   103.76 MB   |    718.00 MB  |  7,116.00 MB  |
 | `xxd`-generated MSVC  |   ~48.60 MB    |  ~477.30 MB   | ~5,280.00 MB  | Out of Memory |
@@ -263,7 +283,9 @@ Below is the peak memory usage (heap usage) for a file of random bytes using a s
 | Strategy              |    400 megabytes    |      1 gigabyte     |
 |-----------------------|---------------------|---------------------|
 | `#embed` GCC          |     3,995.34 MB     |      9,795.31 MB    |
+| `#embed` Clang        |    Out of Memory    |     Out of Memory   |
 | `phd::embed` GCC      |     1,494.66 MB     |      5,279.37 MB    |
+| `phd::embed` Clang    |     1,278.85 MB     |      3,195.58 MB    |
 | `xxd`-generated GCC   |    Out of Memory    |     Out of Memory   |
 | `xxd`-generated Clang |    Out of Memory    |     Out of Memory   |
 | `xxd`-generated MSVC  |    Out of Memory    |     Out of Memory   |
