@@ -280,7 +280,7 @@ Below is the peak memory usage (heap usage) for a file of random bytes using a s
 | `xxd`-generated GCC    |    24.85 MB    |   134.34 MB   |  1,347.00 MB  | 12,622.00 MB  |
 | `xxd`-generated Clang  |    41.83 MB    |   103.76 MB   |    718.00 MB  |  7,116.00 MB  |
 | `xxd`-generated MSVC   |   ~48.60 MB    |  ~477.30 MB   | ~5,280.00 MB  | Out of Memory |
-| `xxd`-generated Circle |    36,58 MB    |    89.10 MB   |    608.39 MB  |  5,739.57 MB  |
+| `xxd`-generated Circle |    36.58 MB    |    89.10 MB   |    608.39 MB  |  5,739.57 MB  |
 | Circle `@array`        |    53.69 MB    |    54.73 MB   |     65.88 MB  |    176.44 MB  |
 | Circle `@embed`        |    33.34 MB    |    33.34 MB   |     39.41 MB  |    113.12 MB  |
 | `objcopy` (linker)     |    17.31 MB    |    17.31 MB   |     17.31 MB  |     57.13 MB  |
