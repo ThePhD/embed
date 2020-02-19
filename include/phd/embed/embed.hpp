@@ -56,32 +56,149 @@ namespace phd {
 
 namespace phd {
 
+	namespace __detail {
+		template <typename _Ty, bool _Str, bool _Dynamic, ::std::size_t _NElements, typename _StrView, typename... _Args>
+		inline constexpr ::std::span<const _Ty, _Dynamic ? ::std::dynamic_extent : _NElements> __embed (_StrView __resource_name, _Args&&... __args) noexcept {
+			static_assert(sizeof(_Ty) == 1 && std::is_trivial_v<_Ty>, "Type must have sizeof(T) == 1, and std::is_trivial_v<T> must be true");
+			static_assert(sizeof...(_Args) <= 1, "Can only specify 1 additional argument as the maximum potential number of bytes.");
+			const _Ty* __res = nullptr;
+			// always returns # of bytes
+			size_t __res_len = __builtin_embed(__resource_name.size(), __resource_name.data(), _Str, ::std::forward<_Args>(__args)..., &__res);
+#if defined(PHD_EMBED_CHECK_TYPE_SIZE) && (PHD_EMBED_CHECK_TYPE_SIZE != 0)	
+			assert((sizeof(_Ty) == 1 || (__res_len % sizeof(_Ty) == 0)) && "Returned a number of bytes unsuitable for the type specified...");
+#endif // Ensure no partial serializations...
+			::std::span<const _Ty, _Dynamic ? ::std::dynamic_extent : _NElements> __elements(__res, (__res_len / sizeof(_Ty)));
+			if constexpr(!_Dynamic) {
+				if (__elements.size() < (sizeof(_Ty) * _NElements)) {
+					throw "cannot have a fixed-size span that returns less than _NElements elements";
+				}
+			}
+			return __elements;
+		}
+	}
+
+	// normal embed
+	// dynamic size
 	template <typename _Ty = std::byte, typename... _Args>
 	inline constexpr ::std::span<const _Ty> embed (::std::string_view __resource_name, _Args&&... __args) noexcept {
-		static_assert(sizeof(_Ty) == 1 && std::is_trivial_v<_Ty>, "Type must have sizeof(T) == 1, and std::is_trivial_v<T> must be true");
-		static_assert(sizeof...(_Args) <= 1, "Can only specify 1 additional argument as the maximum potential number of bytes.");
-		const _Ty* __res = nullptr;
-		// always returns # of bytes
-		size_t __res_len = __builtin_embed(__resource_name.size(), __resource_name.data(), false, ::std::forward<_Args>(__args)..., &__res);
-#if defined(PHD_EMBED_CHECK_TYPE_SIZE) && (PHD_EMBED_CHECK_TYPE_SIZE != 0)	
-		assert((sizeof(_Ty) == 1 || (__res_len % sizeof(_Ty) == 0)) && "Returned a number of bytes unsuitable for the type specified...");
-#endif // Ensure no partial serializations...
-		return {__res, (__res_len / sizeof(_Ty))};
+		return __detail::__embed<_Ty, false, true, 0>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
 	}
 
 	template <typename _Ty = std::byte, typename... _Args>
-	inline constexpr ::std::span<const _Ty> embed_str (::std::string_view __resource_name, _Args&&... __args) noexcept {
-		static_assert(sizeof(_Ty) == 1 && std::is_trivial_v<_Ty>, "Type must have sizeof(T) == 1, and std::is_trivial_v<T> must be true");
-		static_assert(sizeof...(_Args) <= 1, "Can only specify 1 additional argument as the maximum potential number of bytes.");
-		const _Ty* __res = nullptr;
-		// always returns # of bytes
-		size_t __res_len = __builtin_embed(__resource_name.size(), __resource_name.data(), true, ::std::forward<_Args>(__args)..., &__res);
-#if defined(PHD_EMBED_CHECK_TYPE_SIZE) && (PHD_EMBED_CHECK_TYPE_SIZE != 0)	
-		assert((sizeof(_Ty) == 1 || (__res_len % sizeof(_Ty) == 0)) && "Returned a number of bytes unsuitable for the type specified...");
-#endif // Ensure no partial serializations...
-		return {__res, (__res_len / sizeof(_Ty))};
+	inline constexpr ::std::span<const _Ty> embed (::std::wstring_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, false, true, 0>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+#ifdef __cpp_char8_t
+
+	template <typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty> embed (::std::u8string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, false, true, 0>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+#endif // char8_t shenanigans
+
+	template <typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty> embed (::std::u16string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, false, true, 0>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+	template <typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty> embed (::std::u32string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, false, true, 0>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+	// fixed size
+	template <::std::size_t _NElements, typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty, _NElements> embed (::std::string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, false, false, _NElements>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
 	}
 	
+	template <::std::size_t _NElements, typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty, _NElements> embed (::std::wstring_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, false, false, _NElements>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+	
+#ifdef __cpp_char8_t
+
+	template <::std::size_t _NElements, typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty, _NElements> embed (::std::u8string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, false, false, _NElements>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+#endif // char8_t shenanigans
+
+	template <::std::size_t _NElements, typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty, _NElements> embed (::std::u16string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, false, false, _NElements>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+	
+	template <::std::size_t _NElements, typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty, _NElements> embed (::std::u32string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, false, false, _NElements>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+	// string embed
+	// dynamic size
+	template <typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty> embed (::std::string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, true, true, 0>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+	template <typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty> embed (::std::wstring_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, true, true, 0>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+#ifdef __cpp_char8_t
+
+	template <typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty> embed (::std::u8string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, true, true, 0>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+#endif // char8_t shenanigans
+
+	template <typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty> embed (::std::u16string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, true, true, 0>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+	template <typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty> embed (::std::u32string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, true, true, 0>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+	// fixed size
+	template <::std::size_t _NElements, typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty, _NElements> embed (::std::string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, true, false, _NElements>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+	
+	template <::std::size_t _NElements, typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty, _NElements> embed (::std::wstring_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, true, false, _NElements>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+	
+#ifdef __cpp_char8_t
+
+	template <::std::size_t _NElements, typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty, _NElements> embed (::std::u8string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, true, false, _NElements>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
+#endif // char8_t shenanigans
+
+	template <::std::size_t _NElements, typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty, _NElements> embed (::std::u16string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, true, false, _NElements>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+	
+	template <::std::size_t _NElements, typename _Ty = std::byte, typename... _Args>
+	inline constexpr ::std::span<const _Ty, _NElements> embed (::std::u32string_view __resource_name, _Args&&... __args) noexcept {
+		return __detail::__embed<_Ty, true, false, _NElements>(::std::move(__resource_name), ::std::forward<_Args>(__args)...);
+	}
+
 } // namespace phd
 
 #else

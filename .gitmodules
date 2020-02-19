@@ -1,0 +1,6 @@
+[submodule "vendor/llfio"]
+	path = vendor/llfio
+	url = https://github.com/ned14/llfio.git
+[submodule "vendor/benchmark"]
+	path = vendor/benchmark
+	url = https://github.com/google/benchmark
