@@ -71,7 +71,7 @@ add_library(phd.embed INTERFACE)
 add_library(phd::embed ALIAS phd.embed)
 target_link_libraries(phd.embed)
 target_include_directories(phd.embed INTERFACE 
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>  
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 	$<INSTALL_INTERFACE:include>
 )
 if (NOT MSVC)

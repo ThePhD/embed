@@ -59,8 +59,8 @@ namespace phd {
 	namespace __detail {
 		template <typename _Ty, bool _Str, bool _Dynamic, ::std::size_t _NElements, typename _StrView, typename... _Args>
 		inline constexpr ::std::span<const _Ty, _Dynamic ? ::std::dynamic_extent : _NElements> __embed (_StrView __resource_name, _Args&&... __args) noexcept {
-			static_assert(sizeof(_Ty) == 1 && std::is_trivial_v<_Ty>, "Type must have sizeof(T) == 1, and std::is_trivial_v<T> must be true");
-			static_assert(sizeof...(_Args) <= 1, "Can only specify 1 additional argument as the maximum potential number of bytes.");
+			static_assert(std::is_trivially_copiable_v<_Ty>, "Type must have sizeof(T) == 1, and std::is_trivial_v<T> must be true");
+			static_assert(sizeof...(_Args) <= 1, "Can only specify 1 additional argument as the maximum potential number of objects.");
 			const _Ty* __res = nullptr;
 			// always returns # of bytes
 			size_t __res_len = __builtin_embed(__resource_name.size(), __resource_name.data(), _Str, ::std::forward<_Args>(__args)..., &__res);
