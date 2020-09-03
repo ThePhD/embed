@@ -17,24 +17,24 @@ Available on Compiler Explorer ([LINK: e.g. 1](https://godbolt.org/z/67K5eq)), c
 
 - [x] GCC Progress:
   - [x] `__builtin_embed` works
-  - [ ] `#depend` works, but needs recursive directory iteration for dep files
-  - [ ] Optimized `#embed`
+  - [ ] `#depend` works (status: needs recursive directory iteration for dep files)
+  - [x] Optimized `#embed`
   - [ ] `#embed` as a template argument list works
   - [ ] `#embed` as a function argument list works
   - [ ] `#embed` inside braced _initializer-list_
-  - [ ] None of the above works in C standard (`-std=c2x`) mode
-  - [ ] Some tests completed: needs more tests for the above
+  - [ ] Haas tests
+  - [ ] Works in C standard (`-std=c2x`) mode
 
 - [x] Clang Progress:
   - [x] Optimized `#embed`
   - [x] `__builtin_embed` works
-  - [x] `#depend` works
+  - [ ] `#depend` works (status: needs better (recursive) directory filtering)
   - [x] `#embed` as a template argument list works
   - [x] `#embed` as a function argument list works
   - [ ] `#embed` inside braced _initializer-list_ for `std::initializer_list` (produces erroneous code generation for temporaries for `std::initializer_list`)
-  - [ ] None of the above works in C standard (`-std=c2x`) mode
+  - [x] Has test
+  - [ ] Works in C standard (`-std=c2x`) mode
   - [ ] Needs special `APValue` representation to not bloat memory for constant folding / constant evaluations
-  - [ ] Needs tests
 
 - [ ] MSVC Progress:
   - I can't propose features to that compiler. `¯\_(ツ)_/¯`
