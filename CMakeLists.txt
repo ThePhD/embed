@@ -34,28 +34,11 @@ else()
     set(PHD_EMBED_IS_TOP_LEVEL_PROJECT false)
 endif()
 
-# Modify bad flags / change defaults if that is the case
-if (PHD_EMBED_IS_TOP_LEVEL_PROJECT)
-	if (CMAKE_SIZEOF_VOID_P EQUAL 4)
-		set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/x86/${CMAKE_BUILD_TYPE}/${CFG_INT_DIR}/lib")
-		set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/x86/${CMAKE_BUILD_TYPE}/${CFG_INT_DIR}/bin")
-		set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/x86/${CMAKE_BUILD_TYPE}/${CFG_INT_DIR}/bin")
-	else()
-		set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/x64/${CMAKE_BUILD_TYPE}/${CFG_INT_DIR}/lib")
-		set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/x64/${CMAKE_BUILD_TYPE}/${CFG_INT_DIR}/bin")
-		set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/x64/${CMAKE_BUILD_TYPE}/${CFG_INT_DIR}/bin")
-	endif()
-
-	if (MSVC)
-		string(REGEX REPLACE "/W[0-4]" "" CMAKE_C_FLAGS ${CMAKE_C_FLAGS})
-		string(REGEX REPLACE "/W[0-4]" "" CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS})
-	endif()
-endif()
-
 # # Include standard modules
 include(CMakeDependentOption)
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
+include(CheckCompilerFlag)
 
 # # Options
 option(PHD_EMBED_CI "Whether or not we are in contiguous integration mode" OFF)
@@ -74,18 +57,8 @@ target_include_directories(phd.embed INTERFACE
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 	$<INSTALL_INTERFACE:include>
 )
-if (NOT MSVC)
-	target_compile_options(phd.embed INTERFACE 
-		-fembed
-		-fembed-builtins
-	)
-endif()
 
 target_sources(phd.embed INTERFACE ${phd.embed.sources})
-#set_target_properties(phd.embed
-#	PROPERTIES
-#	EXPORT_NAME phd::embed
-#)
 
 # # Benchmarks, Tests, Examples
 if (PHD_EMBED_TESTS)
@@ -100,7 +73,4 @@ if (PHD_EMBED_EXAMPLES)
 endif()
 if (PHD_EMBED_BENCHMARKS)
 	add_subdirectory(benchmarks)
-endif()
-if (PHD_EMBED_SCRATCH_LIVE_DEMO)
-	add_subdirectory(scratch)
 endif()

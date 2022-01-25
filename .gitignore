@@ -1,3 +1,6 @@
+.cmake/
 .vscode/
-build/
 scratch/
+*.exe
+*.obj
+build

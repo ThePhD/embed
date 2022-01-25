@@ -1,6 +1,6 @@
 # embed
 
-The library portion of [P1040](https://thephd.github.io/vendor/future_cxx/papers/d1040.html). Use with a capable compiler. Errors if your compiler doesn't have the built-in or a way to detect the built-in.
+The library portion of [P1040](https://thephd.github.io/vendor/future_cxx/papers/d1040.html), and some tips about the language version [P1967](https://thephd.github.io/vendor/future_cxx/papers/source/C%20-%20embed.html). Use with a capable compiler. Errors if your compiler doesn't have the built-in or a way to detect the built-in.
 
 CC0.
 
