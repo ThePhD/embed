@@ -2,8 +2,8 @@
 
 int main () {
 	const char str_data[] = {
-#embed "a.txt"
-		, 0
+#embed "a.txt" suffix(,)
+		0
 	};
 	if (sizeof(str_data) != 2) {
 		return 1;

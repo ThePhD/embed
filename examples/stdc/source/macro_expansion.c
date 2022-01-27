@@ -2,15 +2,18 @@
 #include <string.h>
 #include <stddef.h>
 
+#define IMPORTANT_VAL 5
+#define LIMIT_PARAM(VAL) limit(VAL)
+
 int main () {
 	const unsigned char data[] = {
-#embed __FILE__ limit(5)
+#embed __FILE__ LIMIT_PARAM(IMPORTANT_VAL)
 	};
 	const size_t data_size = sizeof(data) / sizeof(*data);
-	_Static_assert((sizeof(data) / sizeof(*data)) == 5, "Limit parameter failed!");
+	_Static_assert((sizeof(data) / sizeof(*data)) == IMPORTANT_VAL, "Limit parameter failed!");
 	unsigned char read_data[sizeof(data) / sizeof(*data)] = {0};
 	const size_t read_data_size = sizeof(read_data) / sizeof(*read_data);
-	FILE* this_file = fopen("FILE.limit.c", "rb");
+	FILE* this_file = fopen("macro_expansion.c", "rb");
 	if (this_file == NULL) {
 		return 1;
 	}

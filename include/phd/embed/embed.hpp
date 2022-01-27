@@ -2,7 +2,7 @@
 // | phd::embed |
 //   ----------
 
-// Written in 2019 by ThePhD <phdofthehouse@gmail.com>
+// Written in 2021 by ThePhD <phdofthehouse@gmail.com>
 
 // To the extent possible under law, the author(s) have dedicated all copyright and related
 // and neighboring rights to this software to the public domain worldwide. This software is
@@ -30,7 +30,11 @@
 #if defined(__has_builtin)
 #if __has_builtin(__builtin_embed)
 #define  PHD_EMBED_HAS_BUILTIN_EMBED 1
+#else
+#define  PHD_EMBED_HAS_BUILTIN_EMBED 0
 #endif
+#else
+#define  PHD_EMBED_HAS_BUILTIN_EMBED 0
 #endif // __has_builtin test
 #endif // undefined PHD_EMBED_HAS_BUILTIN_EMBED
 

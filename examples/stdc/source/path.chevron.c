@@ -4,11 +4,10 @@
 
 int main () {
 	const char str_data[] = {
-#embed <media/art.txt>
-		, 0
+#embed <media/art.txt> suffix(,)
+		0
 	};
-	const size_t data_size = sizeof(str_data) / sizeof(*str_data);
-	const char art_data[sizeof(str_data) / sizeof(*str_data)] = {0};
+	char art_data[sizeof(str_data) / sizeof(*str_data)] = {0};
 	const size_t art_data_size = sizeof(art_data) / sizeof(*art_data);
 	FILE* this_file = fopen("art.txt", "rb");
 	if (this_file == NULL) {

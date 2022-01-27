@@ -61,12 +61,27 @@ target_include_directories(phd.embed INTERFACE
 target_sources(phd.embed INTERFACE ${phd.embed.sources})
 
 # # Benchmarks, Tests, Examples
+function(target_common_options target)
+	target_compile_options(${target}
+		PRIVATE
+		-std=c2x
+		-Wall
+		-Wpedantic
+		"-binary-dir=${CMAKE_CURRENT_SOURCE_DIR}/assets"
+	)
+	target_compile_definitions(${target}
+		PRIVATE
+		_CRT_SECURE_NO_WARNINGS=1
+		_CRT_SECURE_NO_DEPRECATE=1
+	)
+	target_include_directories(${target}
+		PRIVATE
+		${CMAKE_CURRENT_SOURCE_DIR}/include
+	)
+endfunction()
+
 if (PHD_EMBED_TESTS)
 	enable_testing()
-endif()
-if (PHD_EMBED_TESTS)
-	enable_testing()
-	add_subdirectory(tests)
 endif()
 if (PHD_EMBED_EXAMPLES)
 	add_subdirectory(examples)
