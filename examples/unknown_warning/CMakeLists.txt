@@ -24,5 +24,5 @@ add_test(NAME unknown_warning.compile
 set_tests_properties(unknown_warning.compile
 	PROPERTIES
 	DEPENDS unknown_warning.compile.clean
-	PASS_REGULAR_EXPRESSION "5.*unknown-directive-parameters;6.*unknown-directive-parameters"
+	PASS_REGULAR_EXPRESSION ".*unknown-directive-parameters.*"
 )

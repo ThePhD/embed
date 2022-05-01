@@ -17,6 +17,12 @@ int main () {
 	return 8;
 #elif __has_embed(__FILE__ dajwdwdjdahwk::meow(x))
 	return 9;
+#elif __has_embed(<media/empty>) != 2
+	return 10;
+#elif __has_embed(<media/empty> limit(0)) != 2
+	return 11;
+#elif __has_embed(<media/art.txt> limit(0)) != 2
+	return 12;
 #else
 	return 0;
 #endif
