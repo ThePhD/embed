@@ -1,6 +1,9 @@
 .cmake/
+.make/
+.build/
 .vscode/
 scratch/
 *.exe
 *.obj
 build
+CMakeUserPresets.json

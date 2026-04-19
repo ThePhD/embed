@@ -1,8 +1,8 @@
 #depend "assets/shaders/*"
 
-
-
 #include <iostream>
+
+#include <phd/embed>
 
 int main() {
   static constexpr std::string_view vx_shader_main_file = "assets/shaders/nymph.vxglsl";

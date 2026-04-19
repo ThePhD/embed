@@ -1,0 +1,97 @@
+{
+	"version": 6,
+	"cmakeMinimumRequired": {
+		"major": 3,
+		"minor": 20,
+		"patch": 0
+	},
+	"configurePresets": [
+		{
+			"name": "embed",
+			"displayName": "embed",
+			"description": "Configure the whole embed repository",
+			"hidden": false,
+			"generator": "Ninja Multi-Config",
+			"installDir": "${sourceParentDir}/.cmake/$env{USER}/install",
+			"binaryDir": "${sourceParentDir}/.cmake/$env{USER}/build",
+			"cacheVariables": {
+				"PHD_EMBED_EXAMPLES": true,
+				"PHD_EMBED_TESTS": true,
+				"CMAKE_INSTALL_PREFIX": "${sourceParentDir}/.cmake/$env{USER}/install"
+			}
+		},
+		{
+			"name": "embed-gcc",
+			"displayName": "embed (gcc)",
+			"description": "Configure embed repository with GCC",
+			"inherits": [
+				"embed"
+			],
+			"cacheVariables": {
+				"CMAKE_C_COMPILER": "gcc",
+				"CMAKE_CXX_COMPILER": "g++"
+			}
+		},
+		{
+			"name": "embed-clang",
+			"displayName": "embed (clang)",
+			"description": "Configure embed repository for Clang",
+			"inherits": [
+				"embed"
+			],
+			"cacheVariables": {
+				"CMAKE_C_COMPILER": "clang",
+				"CMAKE_CXX_COMPILER": "clang++"
+			}
+		}
+	],
+	"buildPresets": [
+		{
+			"name": "embed",
+			"description": "build the embed library and related tests for gcc",
+			"displayName": "embed",
+			"configurePreset": "embed",
+			"configuration": "Debug"
+		},
+		{
+			"name": "embed",
+			"description": "install the embed library",
+			"displayName": "embed (install)",
+			"configurePreset": "embed-windows",
+			"configuration": "Debug",
+			"targets": [
+				"install-embed"
+			]
+		}
+	],
+	"testPresets": [
+		{
+			"name": "embed",
+			"description": "debug tests for phd::embed",
+			"displayName": "embed",
+			"configurePreset": "embed",
+			"configuration": "Debug"
+		}
+	],
+	"workflowPresets": [
+		{
+			"name": "embed",
+			"description": "Typical embed workflow",
+			"displayName": "embed",
+			"steps": [
+				{
+					"type": "configure",
+					"name": "embed"
+				},
+				{
+					"type": "build",
+					"name": "embed"
+				},
+				{
+					"type": "test",
+					"name": "embed"
+				}
+			]
+		}
+	]
+}

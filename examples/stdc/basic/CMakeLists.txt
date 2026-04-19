@@ -12,10 +12,3 @@ add_custom_target(hi-copy
 )
 add_dependencies(hi hi-copy)
 add_test(NAME hi COMMAND hi)
-
-# urandom
-if (EXISTS /dev/urandom)
-	add_executable(urandom source/urandom.c)
-	target_common_options(urandom)
-	add_test(NAME urandom COMMAND urandom)
-endif()

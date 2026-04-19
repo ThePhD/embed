@@ -18,7 +18,7 @@ cmake_minimum_required(VERSION 3.13.0)
 # # Project declaration
 # informs about the project, gives a description, version and MOST IMPORTANTLY
 # the languages the project is going to use. Required.
-project(phd.embed VERSION 0.3.0 DESCRIPTION "A spicy library on top of compiler builtins." LANGUAGES C CXX)
+project(phd.embed VERSION 1.0.0 DESCRIPTION "A spicy library on top of compiler builtins." LANGUAGES C CXX)
 
 # # Modules
 # Include modules useful to the project, whether locally made in our own cmake DIRECTORY
@@ -67,7 +67,7 @@ function(target_common_options target)
 		-std=c2x
 		-Wall
 		-Wpedantic
-		"-binary-dir=${CMAKE_CURRENT_SOURCE_DIR}/assets"
+		"--embed-dir=${CMAKE_CURRENT_SOURCE_DIR}/assets"
 	)
 	target_compile_definitions(${target}
 		PRIVATE

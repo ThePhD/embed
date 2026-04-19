@@ -1,3 +1,6 @@
+add_subdirectory(basic)
+add_subdirectory(unknown_warning)
+
 # FILE
 add_executable(FILE source/FILE.c)
 target_common_options(FILE)
@@ -63,9 +66,9 @@ add_executable(path.chevron source/path.chevron.c)
 target_common_options(path.chevron)
 add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/art.txt
 	COMMAND ${CMAKE_COMMAND} -E copy
-		${CMAKE_CURRENT_SOURCE_DIR}/assets/media/art.txt
+		${CMAKE_CURRENT_SOURCE_DIR}/../assets/media/art.txt
 		${CMAKE_CURRENT_BINARY_DIR}/art.txt
-	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/media/art.txt
+	DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/../assets/media/art.txt
 )
 add_custom_target(path.chevron-copy
 	DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/art.txt

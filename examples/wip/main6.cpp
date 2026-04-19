@@ -18,7 +18,7 @@ compute_stuff(const char* const ptr, std::size_t ptr_size, std::uint64_t seed = 
 }
 
 int main () {
-	constexpr std::span<const char> art_data  = std::embed("foo/art.txt");
+	constexpr std::span<const char> art_data  = phd::embed("foo/art.txt");
 	constexpr std::uint64_t actual = compute_stuff(art_data.data(), art_data.size());
 	static_assert(actual == 103);
 
