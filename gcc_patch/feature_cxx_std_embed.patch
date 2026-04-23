@@ -1,0 +1,4699 @@
+From b3dca61dea761fa4cfc135c5bef9ccd5919635e8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bj=C3=B6rkus=20=27ThePhD=27=20Dorkus?=
+ <phdofthehouse@gmail.com>
+Date: Fri, 24 Apr 2026 02:31:09 +0200
+Subject: [PATCH] =?UTF-8?q?[libcpp][libstdc++-v][gcc/c-family][gcc/cp][gcc?=
+ =?UTF-8?q?]=20=F0=9F=8E=89=20full=20core=20implementation=20of=20#embed?=
+ =?UTF-8?q?=20(no=20tests=20yet)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Björkus 'ThePhD' Dorkus <phdofthehouse@gmail.com>
+---
+ gcc/ChangeLog                         |  31 +-
+ gcc/builtin-types.def                 |   7 +
+ gcc/builtins.cc                       | 302 +++++++++-
+ gcc/builtins.def                      |   3 +
+ gcc/c-family/ChangeLog                |  11 +
+ gcc/c-family/c-common.cc              | 190 +++++-
+ gcc/c-family/c-common.h               |   5 +-
+ gcc/c-family/c-opts.cc                |  12 +
+ gcc/c/c-typeck.cc                     |   2 +-
+ gcc/cp/ChangeLog                      |  14 +
+ gcc/cp/call.cc                        |   7 +-
+ gcc/cp/constexpr.cc                   |  28 +
+ gcc/cp/tree.cc                        |  16 +-
+ gcc/doc/extend.texi                   | 802 ++++++++++++++------------
+ gcc/incpath.cc                        | 172 ++++++
+ gcc/incpath.h                         |  23 +
+ gcc/tree-core.h                       |  15 +
+ gcc/tree.cc                           | 149 ++++-
+ gcc/tree.h                            |  12 +
+ include/ChangeLog                     |  31 +-
+ include/filenames.h                   |   4 +
+ libcpp/ChangeLog                      |  19 +-
+ libcpp/directives.cc                  |  59 ++
+ libcpp/files.cc                       | 456 ++++++++++++++-
+ libcpp/include/cpplib.h               |  61 ++
+ libcpp/init.cc                        |   1 +
+ libcpp/internal.h                     |  12 +-
+ libstdc++-v3/ChangeLog                |   9 +
+ libstdc++-v3/include/Makefile.am      |   1 +
+ libstdc++-v3/include/Makefile.in      |  23 +-
+ libstdc++-v3/include/bits/version.def |  10 +
+ libstdc++-v3/include/bits/version.h   |  10 +
+ libstdc++-v3/include/std/embed        | 272 +++++++++
+ 33 files changed, 2314 insertions(+), 455 deletions(-)
+ create mode 100644 libstdc++-v3/include/std/embed
+
+diff --git a/gcc/ChangeLog b/gcc/ChangeLog
+index f01e9376214..23bc70cb93f 100644
+--- a/gcc/ChangeLog
++++ b/gcc/ChangeLog
+@@ -1,3 +1,32 @@
++2026-04-23  Bjorkus "ThePhD" Dorkus  <phdofthehouse@gmail.com>
++
++	* doc/extend.texi: document new __builtin_std_embed builtin.
++	List potential extension points.
++	* builtins.cc (fold_builtin_std_embed): new function for initiating
++	potential constant folding of a __builtin_std_embed call.
++	* c-common.cc (check_builtin_std_embed): new function for type checking
++	new __builtin_std_embed function.
++	* builtins.cc (fold_builtin_varargs): new _BUILT_IN_STD_EMBED case to
++	call newly added function for folding __builtin_std_embed.
++	* builtins.def: add new BUILT_IN_STD_EMBED/"std_embed" GCC builtin.
++	Synchronized with clang implementation.
++	* builtin-types.def: new variable type and 2 new reference types.
++	* incpath.h: new INC_DEPEND header chain, new function declarations
++	for cpp_dep_pattern type and cpp_dep_* helper functions.
++	* incpath.cc: one new include for regex, new cpp_dep_pattern forward
++	type. cpp_dep_pattern* usability function implementations. Helper
++	function append_file_to_dir_name, basic finding functions.
++	deps_head and deps_tail for storage of input dependencies from #depend
++	directive.
++	search_path_kind, search_path_with_dir.
++	* tree-core.h: new type global_constant_evaluation_link. New constant
++	evaluation stack tracking functions and accessors for global variable
++	that is a forward-linked list.
++	* tree.cc: implementation of new global_constant_evaluation_link
++	functions.
++	* tree.h (strip_pointer_types_by): new inline helper function for partial
++	pointer type stripping.
++
+ 2026-04-22  Sam James  <sam@gentoo.org>
+ 
+ 	* ipa-prop.cc (param_type_may_change_p): Fix comment typo.
+@@ -6832,7 +6861,7 @@
+ 	* doc/install.texi: Ditto.
+ 	* doc/invoke.texi: Ditto.
+ 
+-
++
+ Copyright (C) 2026 Free Software Foundation, Inc.
+ 
+ Copying and distribution of this file, with or without modification,
+diff --git a/gcc/builtin-types.def b/gcc/builtin-types.def
+index ab0cbc65cfc..c133f3f9e5d 100644
+--- a/gcc/builtin-types.def
++++ b/gcc/builtin-types.def
+@@ -220,6 +220,10 @@ DEF_PRIMITIVE_TYPE (BT_PTR_CONST_STRING,
+ 		    build_pointer_type
+ 		     (build_qualified_type (string_type_node,
+ 					    TYPE_QUAL_CONST)))
++/* The C++ type representing a modifiable lvalue size_t& */
++DEF_PRIMITIVE_TYPE (BT_SIZE_REF, build_reference_type(size_type_node))
++/* The C++ type representing a modifiable lvalue int& */
++DEF_PRIMITIVE_TYPE (BT_INT_REF, build_reference_type(integer_type_node))
+ 
+ DEF_POINTER_TYPE (BT_PTR_UINT, BT_UINT)
+ DEF_POINTER_TYPE (BT_PTR_LONG, BT_LONG)
+@@ -1062,6 +1066,9 @@ DEF_FUNCTION_TYPE_VAR_3 (BT_FN_SSIZE_STRING_SIZE_CONST_STRING_VAR,
+ 			 BT_SSIZE, BT_STRING, BT_SIZE, BT_CONST_STRING)
+ DEF_FUNCTION_TYPE_VAR_3 (BT_FN_INT_FILEPTR_INT_CONST_STRING_VAR,
+ 			 BT_INT, BT_FILEPTR, BT_INT, BT_CONST_STRING)
++DEF_FUNCTION_TYPE_VAR_3 (BT_FN_CONST_PTR_INT_INT_REF_SIZE_REF_VAR,
++			 BT_CONST_PTR,
++			 BT_INT, BT_INT_REF, BT_SIZE_REF)
+ 
+ DEF_FUNCTION_TYPE_VAR_4 (BT_FN_INT_STRING_INT_SIZE_CONST_STRING_VAR,
+ 			 BT_INT, BT_STRING, BT_INT, BT_SIZE, BT_CONST_STRING)
+diff --git a/gcc/builtins.cc b/gcc/builtins.cc
+index 692e20088c2..30bb9716d8e 100644
+--- a/gcc/builtins.cc
++++ b/gcc/builtins.cc
+@@ -82,6 +82,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include "demangle.h"
+ #include "gimple-range.h"
+ #include "pointer-query.h"
++#include "incpath.h"
+ 
+ struct target_builtins default_target_builtins;
+ #if SWITCHABLE_TARGET
+@@ -1423,7 +1424,7 @@ get_memory_rtx (tree exp, tree len)
+   set_mem_alias_set (mem, 0);
+   return mem;
+ }
+-
++
+ /* Built-in functions to perform an untyped call and return.  */
+ 
+ /* Wrapper that implicitly applies a delta when getting or setting the
+@@ -6424,7 +6425,7 @@ expand_builtin_fork_or_exec (tree fn, tree exp, rtx target, int ignore)
+  }
+ 
+ 
+-
++
+ /* Reconstitute a mode for a __sync intrinsic operation.  Since the type of
+    the pointer in these functions is void*, the tree optimizers may remove
+    casts.  The mode computed in expand_builtin isn't reliable either, due
+@@ -7466,7 +7467,7 @@ expand_builtin_set_thread_pointer (tree exp)
+   error ("%<__builtin_set_thread_pointer%> is not supported on this target");
+ }
+ 
+-
++
+ /* Emit code to restore the current value of stack.  */
+ 
+ static void
+@@ -10601,6 +10602,299 @@ fold_builtin_LINE (location_t loc, tree type)
+   return build_int_cst (type, LOCATION_LINE (loc));
+ }
+ 
++/* Fold a call to __builtin_std_embed to an pointer to string literal.  */
++
++static inline tree
++fold_builtin_std_embed (location_t loc, tree* args, int nargs)
++{
++  constexpr int file_not_found = 0;
++  constexpr int file_found = 1;
++  constexpr int file_found_no_depend = 2;
++  constexpr int file_found_empty = 3;
++
++  const bool has_limit_arg = nargs == 7;
++  /* should have already been checked but we do this here too anyways */
++  if (nargs < 6 && !has_limit_arg)
++    {
++      internal_error ("incorrect number of '__builtin_std_embed' arguments");
++      return error_mark_node;
++    }
++  tree &locus_arg = args[0];
++  tree &status_ref_arg = args[1];
++  tree &size_ref_arg = args[2];
++  tree &ptr_indicator_arg = args[3];
++  tree &resource_name_size_arg = args[4];
++  tree &resource_name_ptr_arg = args[5];
++  tree &offset_arg = args[6];
++  /* all other args are already type checked, we just need to make sure
++     they are constants that we can fold at this point. */
++  if (!tree_fits_uhwi_p (locus_arg))
++    {
++      error_at (EXPR_LOC_OR_LOC (locus_arg, loc),
++		"integer constant expression %qE is too large",
++		locus_arg);
++      return error_mark_node;
++    }
++  if (!tree_fits_uhwi_p (resource_name_size_arg))
++    {
++      error_at (EXPR_LOC_OR_LOC (resource_name_size_arg, loc),
++		"integer constant expression %qE is too large",
++		resource_name_size_arg);
++      return error_mark_node;
++    }
++  if (!tree_fits_uhwi_p (offset_arg))
++    {
++      error_at (EXPR_LOC_OR_LOC (offset_arg, loc),
++		"integer constant expression %qE is too large",
++		offset_arg);
++      return error_mark_node;
++    }
++  unsigned HOST_WIDE_INT resource_name_lenh =
++    tree_to_uhwi (resource_name_size_arg);
++  unsigned HOST_WIDE_INT locus = tree_to_uhwi (locus_arg);
++  const bool do_local_search = (locus & HOST_WIDE_INT_1) == HOST_WIDE_INT_1;
++  unsigned HOST_WIDE_INT limit_storage = 0;
++  unsigned HOST_WIDE_INT offset = tree_to_uhwi (offset_arg);
++  unsigned HOST_WIDE_INT *limit = NULL;
++  /* limit_arg is part of the variable part of the tree, so we need to
++     at least type-check it here in the fold. */
++  if (has_limit_arg)
++    {
++      tree &limit_arg = args[7];
++      if (!tree_fits_uhwi_p (limit_arg))
++	{
++	  error_at (EXPR_LOC_OR_LOC (limit_arg, loc),
++		    "integer constant expression %qE is too large",
++		    limit_arg);
++	  return error_mark_node;
++	}
++      limit_storage = tree_to_uhwi (limit_arg);
++      limit = &limit_storage;
++    }
++  else
++    {
++      limit = NULL;
++    }
++
++  tree resource_root_offset_value = NULL_TREE;
++  tree resource_root_size_value = NULL_TREE;
++  tree resource_root_str_value = string_constant (resource_name_ptr_arg,
++						  &resource_root_offset_value,
++						  &resource_root_size_value,
++						  NULL);
++  unsigned HOST_WIDE_INT resource_root_offset =
++    tree_to_uhwi (resource_root_offset_value);
++  unsigned HOST_WIDE_INT resource_root_size =
++    tree_to_uhwi (resource_root_size_value);
++  /* sanity check: out-of-bounds access in resource name string;
++     this should have been caught much, much earlier. */
++  gcc_assert (resource_root_size > resource_root_offset);
++  gcc_assert ((resource_root_size - resource_root_offset)
++	      >= resource_name_lenh);
++  auto write_out_status = [&](int status) -> tree
++    {
++      tree status_value = build_int_cst (integer_type_node, status);
++      tree status_out_target =
++	build_fold_indirect_ref_loc (EXPR_LOC_OR_LOC (status_ref_arg, loc),
++				     status_ref_arg);
++      tree status_write =
++	fold_build2_loc (EXPR_LOC_OR_LOC (status_ref_arg, loc),
++			 MODIFY_EXPR, TREE_TYPE (status_out_target),
++			 status_out_target, status_value);
++      return status_write;
++    };
++  auto fold_status_fail = [&](int status) -> tree
++    {
++      tree status_write = write_out_status(status);
++      return fold_build2_loc (loc, COMPOUND_EXPR,
++			      TREE_TYPE (null_pointer_node),
++			      status_write, null_pointer_node);
++    };
++
++  const char *resource_name =
++    TREE_STRING_POINTER (resource_root_str_value) + resource_root_offset;
++  gcc_checking_assert (resource_name_lenh <= (unsigned HOST_WIDE_INT)(UINT_MAX));
++  unsigned int resource_name_len = (unsigned int)resource_name_lenh;
++  tree resource_name_type
++    = TYPE_MAIN_VARIANT (TREE_TYPE (TREE_TYPE (resource_root_str_value)));
++  unsigned HOST_WIDE_INT type_name_size =
++    tree_to_uhwi (TYPE_SIZE_UNIT (resource_name_type));
++  if (type_name_size != 1)
++    {
++      /* must be a wide character type; need to convert based on parser?
++	 TODO: investigate what the resource name's format is in
++	 (has it already been converted internally?) at this stage */
++      sorry_at(EXPR_LOC_OR_LOC (resource_name_ptr_arg, loc),
++	       "wide character string support not yet implemented");
++      return NULL_TREE;
++    }
++
++  static constexpr const char *empty_sentinel = "";
++  const char *lookup_from = NULL;
++  if (do_local_search)
++    {
++      int call_stack_distance = (int)(locus >> HOST_WIDE_INT_1);
++      const global_constant_evaluation_link *link =
++	get_constant_eval_list_rev_at (call_stack_distance);
++      location_t maybe_wrapper_invocation_loc =
++	EXPR_LOC_OR_LOC (link ? link->value : NULL_TREE, loc);
++      lookup_from = LOCATION_FILE (maybe_wrapper_invocation_loc);
++    }
++  const char *original_lookup_from = lookup_from;
++  if (lookup_from)
++    {
++      const char *first_slash = strrchr (lookup_from, '/');
++      const char * first_rslash = strrchr (lookup_from, '\\');
++      if (first_slash != NULL || first_rslash != NULL)
++	{
++	  ptrdiff_t len = first_slash != NULL
++	    ? first_slash - lookup_from
++	    : 0;
++          ptrdiff_t rlen = first_rslash != NULL
++	    ? first_rslash - lookup_from
++	    : 0;
++	  if (len < rlen)
++	    len = rlen;
++	  len += 1;
++	  char *new_lookup_from = XCNEWVEC (char, len + 1);
++	  memcpy (new_lookup_from, lookup_from, len - 1);
++	  new_lookup_from[len - 1] = '/';
++	  new_lookup_from[len] = '\0';
++	  lookup_from = new_lookup_from;
++	}
++      else
++	{
++	  /* there is no seperator -- working directory or
++	     non-suffixed drive?? */
++	  if (!IS_ABSOLUTE_PATH (lookup_from))
++	    {
++	      /* it's non-absolute but with no path separators:
++		 assume it's based on the CWD */
++	      lookup_from = empty_sentinel;
++	    }
++	}
++    }
++  struct cleanup_name_t
++    {
++      const char *p;
++      ~cleanup_name_t()
++	{
++	  free (const_cast<void *>((const void *)p));
++	}
++    };
++  struct cleanup_name_t cleanup_lookup =
++    {
++      lookup_from == original_lookup_from || lookup_from == empty_sentinel
++	? NULL
++	: lookup_from
++    };
++  const char *found_name = NULL;
++  if (!search_path_kind (resource_name, resource_name_len,
++			 INC_EMBED, lookup_from, &found_name, NULL))
++    {
++      return fold_status_fail (file_not_found);
++    }
++  struct cleanup_name_t cleanup_name = {found_name};
++  unsigned int found_name_len = (unsigned int)strlen (found_name);
++  if (!cpp_dep_pattern_check (found_name, found_name_len))
++    {
++      return fold_status_fail (file_found_no_depend);
++    }
++
++  struct stat found_name_st;
++  if (stat (found_name, &found_name_st) != 0)
++    {
++      return fold_status_fail (file_not_found);
++    }
++  if (!S_ISREG(found_name_st.st_mode) && limit == NULL)
++    {
++      /* reading from a non-regular file without a limit can result in an
++	 infinite read / improper read: error out to protect us */
++      error_at (loc, "the file is a non-regular file (block, socket, etc.) "
++		"and no limit argument was specified");
++      return error_mark_node;
++    }
++  const unsigned HOST_WIDE_INT impl_resource_size =
++    (unsigned HOST_WIDE_INT)found_name_st.st_size;
++  if (impl_resource_size == 0)
++    {
++      return fold_status_fail (file_found_empty);
++    }
++
++  unsigned HOST_WIDE_INT resource_size =
++    offset > impl_resource_size ? 0 : impl_resource_size - offset;
++  if (limit && resource_size > *limit)
++    {
++      resource_size = *limit;
++    }
++
++  if (resource_size == 0)
++    {
++      return fold_status_fail (file_found_empty);
++    }
++
++  tree unqual_elem_type =
++    TYPE_MAIN_VARIANT (TREE_TYPE (TREE_TYPE (ptr_indicator_arg)));
++  char *resource_ptr = NULL;
++  FILE *resource_file = fopen (found_name, "rb");
++  if (resource_file == NULL)
++    {
++      return fold_status_fail (file_not_found);
++    }
++  struct cleanup_file_t
++    {
++      FILE *f;
++      char **p;
++      ~cleanup_file_t()
++	{
++	  fclose (f);
++	  free ((void *)*p);
++	}
++    } cleanup_file = {resource_file, &resource_ptr};
++
++  resource_ptr = XCNEWVEC (char, resource_size);
++  if (offset > 0 && fseek (resource_file, offset, SEEK_CUR) != 0)
++    {
++      error_at (EXPR_LOC_OR_LOC (offset_arg, loc),
++		"the file '%s' was opened but offsetting "
++		"%llu %qT's elements failed",
++		resource_name, (unsigned long long)offset, unqual_elem_type);
++      return error_mark_node;
++    }
++  const size_t resource_read = fread ((void *)resource_ptr, 1,
++				      resource_size, resource_file);
++  if (resource_read != resource_size)
++    {
++      error_at (limit != NULL ? EXPR_LOC_OR_LOC (args[6], loc) : loc,
++		"the file '%s' was opened but unable to "
++		"read %llu %qT's elements",
++		resource_name, (unsigned long long)resource_size,
++		unqual_elem_type);
++      return error_mark_node;
++    }
++
++  tree binary_string = build_string_literal (0, resource_ptr,
++					     unqual_elem_type,
++					     resource_size);
++  tree binary_size_value = build_int_cstu(size_type_node, resource_size);
++  gcc_checking_assert (binary_string != NULL_TREE);
++  gcc_checking_assert (binary_size_value != NULL_TREE);
++  /* write out size */
++  tree size_out_target =
++    build_fold_indirect_ref_loc (EXPR_LOC_OR_LOC (size_ref_arg, loc),
++				 size_ref_arg);
++  tree size_write = fold_build2_loc (EXPR_LOC_OR_LOC (size_ref_arg, loc),
++				     MODIFY_EXPR, TREE_TYPE(size_out_target),
++				     size_out_target, binary_size_value);
++  gcc_checking_assert (size_write != NULL_TREE);
++  tree result_type = TREE_TYPE (binary_string);
++  tree status_write = write_out_status (file_found);
++  tree status_and_ptr = fold_build2_loc (loc, COMPOUND_EXPR, result_type,
++					 status_write, binary_string);
++  return fold_build2_loc (loc, COMPOUND_EXPR, result_type,
++			  size_write, status_and_ptr);
++}
++
+ /* Fold a call to built-in function FNDECL with 0 arguments.
+    This function returns NULL_TREE if no simplification was possible.  */
+ 
+@@ -11884,6 +12178,8 @@ fold_builtin_varargs (location_t loc, tree fndecl, tree *args, int nargs)
+     case BUILT_IN_SUBCLL:
+       return fold_builtin_addc_subc (loc, fcode, args);
+ 
++    case BUILT_IN_STD_EMBED:
++      return fold_builtin_std_embed (loc, args, nargs);
+     default:
+       break;
+     }
+diff --git a/gcc/builtins.def b/gcc/builtins.def
+index 8ab0599b17f..609612a9f9e 100644
+--- a/gcc/builtins.def
++++ b/gcc/builtins.def
+@@ -1267,6 +1267,9 @@ DEF_BUILTIN_STUB (BUILT_IN_EH_COPY_VALUES, "__builtin_eh_copy_values")
+ DEF_GCC_BUILTIN (BUILT_IN_FILE, "FILE", BT_FN_CONST_STRING, ATTR_NOTHROW_LEAF_LIST)
+ DEF_GCC_BUILTIN (BUILT_IN_FUNCTION, "FUNCTION", BT_FN_CONST_STRING, ATTR_NOTHROW_LEAF_LIST)
+ DEF_GCC_BUILTIN (BUILT_IN_LINE, "LINE", BT_FN_INT, ATTR_NOTHROW_LEAF_LIST)
++DEF_GCC_BUILTIN (BUILT_IN_STD_EMBED, "std_embed",
++		 BT_FN_CONST_PTR_INT_INT_REF_SIZE_REF_VAR,
++		 ATTR_CONST_NOTHROW_TYPEGENERIC_LEAF)
+ 
+ /* Control Flow Redundancy hardening out-of-line checker.  */
+ DEF_BUILTIN_STUB (BUILT_IN___HARDCFR_CHECK, "__builtin___hardcfr_check")
+diff --git a/gcc/c-family/ChangeLog b/gcc/c-family/ChangeLog
+index d5036a2ac39..e109e4641f4 100644
+--- a/gcc/c-family/ChangeLog
++++ b/gcc/c-family/ChangeLog
+@@ -1,3 +1,14 @@
++2026-04-23  Bjorkus "ThePhD" Dorkus  <phdofthehouse@gmail.com>
++
++	* c-common.cc (check_builtin_arguments): modify to allow passing pointer
++	to the function itself and not just fndecl/orig_fndecl, to allow for
++	modification of a function's return type during type checking. Add
++	BUILT_IN_STD_EMBED case.
++	* c-common.h (heck_builtin_function_arguments): same.
++	* c-opts.cc (c_common_finish): use cpp_destrpy_all_dep_patterns and
++	connect new cb_depend function to updated cpp_callbacks value.
++
++
+ 2026-04-22  Jakub Jelinek  <jakub@redhat.com>
+ 
+ 	* c-cppbuiltin.cc (c_cpp_builtins): Bump __cpp_impl_reflection value
+diff --git a/gcc/c-family/c-common.cc b/gcc/c-family/c-common.cc
+index 5acb221d31f..360eaec3e47 100644
+--- a/gcc/c-family/c-common.cc
++++ b/gcc/c-family/c-common.cc
+@@ -176,7 +176,7 @@ machine_mode c_default_pointer_mode = VOIDmode;
+ */
+ 
+ tree c_global_trees[CTI_MAX];
+-
++
+ /* Switches common to the C front ends.  */
+ 
+ /* Nonzero means don't output line number information.  */
+@@ -972,7 +972,7 @@ c_get_substring_location (const substring_loc &substr_loc,
+ 				     out_loc);
+ }
+ 
+-
++
+ /* Return true iff T is a boolean promoted to int.  */
+ 
+ bool
+@@ -1847,7 +1847,7 @@ convert_and_check (location_t loc, tree type, tree expr, bool init_const)
+ 
+   return result;
+ }
+-
++
+ /* A node in a list that describes references to variables (EXPR), which are
+    either read accesses if WRITER is zero, or write accesses, in which case
+    WRITER is the parent of EXPR.  */
+@@ -2319,7 +2319,7 @@ verify_sequence_points (tree expr)
+   warn_for_collisions (after_sp);
+   obstack_free (&tlist_obstack, tlist_firstobj);
+ }
+-
++
+ /* Validate the expression after `case' and apply default promotions.  */
+ 
+ static tree
+@@ -2342,7 +2342,7 @@ check_case_value (location_t loc, tree value)
+ 
+   return value;
+ }
+-
++
+ /* Return an integer type with BITS bits of precision,
+    that is unsigned if UNSIGNEDP is nonzero, otherwise signed.  */
+ 
+@@ -2910,7 +2910,7 @@ c_register_builtin_type (tree type, const char* name)
+ 
+   registered_builtin_types = tree_cons (0, type, registered_builtin_types);
+ }
+-
++
+ /* Print an error message for invalid operands to arith operation
+    CODE with TYPE0 for operand 0, and TYPE1 for operand 1.
+    RICHLOC is a rich location for the message, containing either
+@@ -2985,7 +2985,7 @@ binary_op_error (rich_location *richloc, enum tree_code code,
+ 	    "invalid operands to binary %s (have %e and %e)",
+ 	    opname, &element_0, &element_1);
+ }
+-
++
+ /* Given an expression as a tree, return its original type.  Do this
+    by stripping any conversion that preserves the sign and precision.  */
+ static tree
+@@ -3371,7 +3371,7 @@ shorten_compare (location_t loc, tree *op0_ptr, tree *op1_ptr,
+ 
+   return NULL_TREE;
+ }
+-
++
+ /* Return a tree for the sum or difference (RESULTCODE says which)
+    of pointer PTROP and integer INTOP.  */
+ 
+@@ -3510,7 +3510,7 @@ pointer_int_sum (location_t loc, enum tree_code resultcode,
+ 
+   return ret;
+ }
+-
++
+ /* Wrap a C_MAYBE_CONST_EXPR around an expression that is fully folded
+    and if NON_CONST is known not to be permitted in an evaluated part
+    of a constant expression.  */
+@@ -3868,7 +3868,7 @@ c_common_truthvalue_conversion (location_t location, tree expr)
+   protected_set_expr_location (expr, location);
+   return expr;
+ }
+-
++
+ static void def_builtin_1  (enum built_in_function fncode,
+ 			    const char *name,
+ 			    enum built_in_class fnclass,
+@@ -3983,7 +3983,7 @@ c_common_get_alias_set (tree t)
+ 
+   return -1;
+ }
+-
++
+ /* Compute the value of 'sizeof (TYPE)' or '__alignof__ (TYPE)', where
+    the IS_SIZEOF parameter indicates which operator is being applied.
+    The COMPLAIN flag controls whether we should diagnose possibly
+@@ -4165,7 +4165,7 @@ c_countof_type (location_t loc, tree type)
+   value = fold_convert_loc (loc, size_type_node, value);
+   return value;
+ }
+-
++
+ /* Implement the _Maxof operator:
+    Return the maximum representable value of an integer type.  */
+ 
+@@ -4207,7 +4207,7 @@ c_minof_type (location_t loc, tree type)
+ 
+   return TYPE_MIN_VALUE (type);
+ }
+-
++
+ /* Handle C and C++ default attributes.  */
+ 
+ enum built_in_attribute
+@@ -5184,7 +5184,7 @@ def_builtin_1 (enum built_in_function fncode,
+     add_builtin_function (libname, libtype, fncode, fnclass,
+ 			  NULL, fnattrs);
+ }
+-
++
+ /* Nonzero if the type T promotes to int.  This is (nearly) the
+    integral promotions defined in ISO C99 6.3.1.1/2.  */
+ 
+@@ -5586,7 +5586,7 @@ finish_label_address_expr (tree label, location_t loc)
+ 
+   return result;
+ }
+-
++
+ 
+ /* Given a boolean expression ARG, return a tree representing an increment
+    or decrement (as indicated by CODE) of ARG.  The front end must check for
+@@ -5626,7 +5626,7 @@ boolean_increment (enum tree_code code, tree arg)
+   TREE_SIDE_EFFECTS (val) = 1;
+   return val;
+ }
+-
++
+ /* Built-in macros for stddef.h and stdint.h, that require macros
+    defined in this file.  */
+ void
+@@ -6388,7 +6388,7 @@ attribute_fallthrough_p (tree attr)
+   return true;
+ }
+ 
+-
++
+ /* Check for valid arguments being passed to a function with FNTYPE.
+    There are NARGS arguments in the array ARGARRAY.  LOC should be used
+    for diagnostics.  Return true if either -Wnonnull or -Wrestrict has
+@@ -6574,6 +6574,150 @@ builtin_function_validate_nargs (location_t loc, tree fndecl, int nargs,
+    ? EXPR_LOC_OR_LOC (args[(N)], input_location)	\
+    : expansion_point_location (arg_loc[(N)]))
+ 
++static bool
++check_builtin_std_embed (location_t loc, vec<location_t> arg_loc, tree *fn,
++			 tree fndecl, int nargs, tree *args, bool complain) {
++  /* check the arguments more appropriately */
++  if (nargs < 7)
++    {
++      if (complain)
++	error_at (loc, "too few arguments to function %qE", fndecl);
++      return false;
++    }
++  if (nargs > 8)
++    {
++      if (complain)
++	error_at (loc, "too many arguments to function %qE", fndecl);
++      return false;
++    }
++  const location_t &input_location = loc;
++  tree &locus_arg = args[0];
++  if (!INTEGRAL_TYPE_P (TREE_TYPE (locus_arg)))
++    {
++      if (complain)
++	error_at (ARG_LOCATION(0), "argument 1 to function %qE must "
++				   "be an integer type", fndecl);
++      return false;
++    }
++  tree &status_out_arg = args[1];
++  tree status_out_arg_type = TREE_TYPE (status_out_arg);
++  const bool status_out_is_lvalue = lvalue_p (status_out_arg);
++  const_tree status_out_no_ref_type =
++    strip_pointer_types_by (status_out_arg_type, 1);
++  if (!status_out_is_lvalue || status_out_no_ref_type != integer_type_node)
++    {
++      if (complain)
++	error_at (ARG_LOCATION(1), "argument 2 to function %qE must "
++				   "be a reference to an 'int'", fndecl);
++      return false;
++    }
++  tree &size_out_arg = args[2];
++  tree size_out_arg_type = TREE_TYPE (size_out_arg);
++  const bool size_out_is_lvalue = lvalue_p (size_out_arg);
++  const_tree size_out_no_ref_type =
++    strip_pointer_types_by (size_out_arg_type, 1);
++  if (!size_out_is_lvalue || size_out_no_ref_type != size_type_node)
++    {
++      if (complain)
++	error_at (ARG_LOCATION(2),
++		  "argument 3 to function %qE must be a "
++		  "reference to a 'size_t'", fndecl);
++      return false;
++    }
++  tree &ptr_indicator_arg = args[3];
++  tree ptr_indicator_arg_type = TREE_TYPE (ptr_indicator_arg);
++  if (!POINTER_TYPE_P (ptr_indicator_arg_type))
++    {
++      if (complain)
++	error_at (ARG_LOCATION(3),
++		  "argument 4 to function %qE must be a "
++		  "pointer to a 'const' type", fndecl);
++      return false;
++    }
++  const_tree const_elem_type =
++    strip_pointer_types_by (ptr_indicator_arg_type, 1);
++  const bool is_const_elem_type = TYPE_READONLY (const_elem_type);
++  const bool is_valid_elem_type =
++    INTEGRAL_TYPE_P (const_elem_type)
++    && int_size_in_bytes (const_elem_type) == 1
++    && TYPE_ALIGN_UNIT (const_elem_type) == 1;
++  if (!is_const_elem_type || !is_valid_elem_type)
++    {
++      if (complain)
++	error_at (ARG_LOCATION(3),
++		  "argument 4 to %qE must be a "
++		  "pointer to a 'const' integer or enumeration "
++		  "type of sizeof and alignof equal to 1", fndecl);
++      return false;
++    }
++  tree &resource_name_size_arg = args[4];
++  tree resource_name_size_arg_type = TREE_TYPE (resource_name_size_arg);
++  if (!INTEGRAL_TYPE_P (resource_name_size_arg_type))
++    {
++      if (complain)
++	error_at (ARG_LOCATION(4),
++		  "argument 5 to function %qE must be an "
++		  "integer type", fndecl);
++      return false;
++    }
++  tree &resource_name_ptr_arg = args[5];
++  const_tree resource_name_ptr_arg_type = TREE_TYPE (resource_name_ptr_arg);
++  const bool is_resource_name_ptr_arg_ptr =
++    POINTER_TYPE_P (resource_name_ptr_arg_type);
++  const_tree resource_name_elem_type =
++    strip_pointer_types_by (resource_name_ptr_arg_type, 1);
++  const_tree resource_name_unqual_elem_type =
++    is_resource_name_ptr_arg_ptr
++    ? TYPE_MAIN_VARIANT (resource_name_elem_type)
++    : NULL_TREE;
++  const bool is_valid_name_type = is_resource_name_ptr_arg_ptr
++    ? resource_name_unqual_elem_type == char_type_node
++      || resource_name_unqual_elem_type == wchar_type_node
++      || resource_name_unqual_elem_type == char8_type_node
++    : false ;
++  if (!is_resource_name_ptr_arg_ptr || !is_valid_name_type)
++    {
++      if (complain)
++	error_at (ARG_LOCATION(5),
++		  "argument 6 to function %qE must be a "
++		  "pointer to 'char', 'wchar_t',  or 'char8_t'", fndecl);
++      return false;
++    }
++  tree &offset_arg = args[6];
++  tree offset_arg_type = TREE_TYPE (offset_arg);
++  if (!INTEGRAL_TYPE_P (offset_arg_type))
++    {
++      if (complain)
++	error_at (ARG_LOCATION(6),
++		  "argument 7 to function %qE must be an "
++		  "integral type", fndecl);
++      return false;
++    }
++  const bool has_limit_arg = nargs == 8;
++  if (has_limit_arg)
++    {
++      tree &limit_arg = args[7];
++      tree limit_arg_type = TREE_TYPE (limit_arg);
++      if (!INTEGRAL_TYPE_P (limit_arg_type))
++	{
++	  if (complain)
++	    error_at (ARG_LOCATION(7),
++		      "argument 8 to function %qE must be an "
++		      "integral type", fndecl);
++	  return false;
++	}
++    }
++
++  /* if passed in, the actual function call needs to have the
++     return type adjusted from a generic void* to the actual pointer type */
++  if (!fn)
++    return true;
++
++  tree &return_type = TREE_TYPE (*fn);
++  return_type = ptr_indicator_arg_type;
++  return true;
++}
++
+ /* Verifies the NARGS arguments ARGS to the builtin function FNDECL.
+    Returns false if there was an error, otherwise true.  LOC is the
+    location of the function; ARG_LOC is a vector of locations of the
+@@ -6583,8 +6727,8 @@ builtin_function_validate_nargs (location_t loc, tree fndecl, int nargs,
+ 
+ bool
+ check_builtin_function_arguments (location_t loc, vec<location_t> arg_loc,
+-				  tree fndecl, tree orig_fndecl, int nargs,
+-				  tree *args, bool complain)
++				  tree *fn, tree fndecl, tree orig_fndecl,
++				  int nargs, tree *args, bool complain)
+ {
+   if (!fndecl_built_in_p (fndecl))
+     return true;
+@@ -6974,7 +7118,9 @@ check_builtin_function_arguments (location_t loc, vec<location_t> arg_loc,
+ 	  return false;
+ 	}
+       return true;
+-
++    case BUILT_IN_STD_EMBED:
++      return check_builtin_std_embed(loc, arg_loc, fn, fndecl,
++				     nargs, args, complain);
+     default:
+       return true;
+     }
+@@ -7346,7 +7492,7 @@ fold_offsetof (tree expr, tree type, enum tree_code ctx)
+     return size_binop (PLUS_EXPR, base, convert (type, off));
+   return fold_build_pointer_plus (base, off);
+ }
+-
++
+ /* *PTYPE is an incomplete array.  Complete it with a domain based on
+    INITIAL_VALUE.  If INITIAL_VALUE is not present, use 1 if DO_DEFAULT
+    is true.  Return 0 if successful, 1 if INITIAL_VALUE can't be deciphered,
+@@ -7555,7 +7701,7 @@ c_common_mark_addressable_vec (tree t)
+ }
+ 
+ 
+-
++
+ /* Used to help initialize the builtin-types.def table.  When a type of
+    the correct size doesn't exist, use error_mark_node instead of NULL.
+    The later results in segfaults even when a decl using the type doesn't
+diff --git a/gcc/c-family/c-common.h b/gcc/c-family/c-common.h
+index 89517e2a80c..92b402d864b 100644
+--- a/gcc/c-family/c-common.h
++++ b/gcc/c-family/c-common.h
+@@ -866,8 +866,9 @@ extern void check_function_arguments_recurse (void (*)
+ 					      void *, tree,
+ 					      unsigned HOST_WIDE_INT,
+ 					      opt_code);
+-extern bool check_builtin_function_arguments (location_t, vec<location_t>, tree,
+-					      tree, int, tree *, bool = true);
++extern bool check_builtin_function_arguments (location_t, vec<location_t>,
++					      tree *, tree, tree, int,
++					      tree *, bool = true);
+ extern void check_function_format (const_tree, tree, int, tree *,
+ 				   vec<location_t> *,
+ 				   bool (*comp_types) (tree, tree));
+diff --git a/gcc/c-family/c-opts.cc b/gcc/c-family/c-opts.cc
+index c818a0802ce..4b67e3edc6e 100644
+--- a/gcc/c-family/c-opts.cc
++++ b/gcc/c-family/c-opts.cc
+@@ -131,6 +131,7 @@ static void add_prefixed_path (const char *, incpath_kind);
+ static void push_command_line_include (void);
+ static void cb_file_change (cpp_reader *, const line_map_ordinary *);
+ static void cb_dir_change (cpp_reader *, const char *);
++static void cb_depend (cpp_reader *, const cpp_dep_pattern *);
+ static void c_finish_options (void);
+ 
+ #ifndef STDC_0_IN_SYSTEM_HEADERS
+@@ -1323,6 +1324,7 @@ c_common_post_options (const char **pfilename)
+   struct cpp_callbacks *cb = cpp_get_callbacks (parse_in);
+   cb->file_change = cb_file_change;
+   cb->dir_change = cb_dir_change;
++  cb->depend = cb_depend;
+   if (lang_hooks.preprocess_options)
+     lang_hooks.preprocess_options (parse_in);
+   cpp_post_options (parse_in);
+@@ -1511,6 +1513,9 @@ c_common_finish (void)
+ 
+   if (out_stream && (ferror (out_stream) || fclose (out_stream)))
+     fatal_error (input_location, "when writing output to %s: %m", out_fname);
++
++  /* close out the head/tails of the cpp_dep_patterns shared from the cpplib */
++  cpp_destroy_all_dep_patterns (get_cpp_dep_patterns ());
+ }
+ 
+ /* Either of two environment variables can specify output of
+@@ -1888,6 +1893,13 @@ cb_dir_change (cpp_reader * ARG_UNUSED (pfile), const char *dir)
+     warning (0, "too late for # directive to set debug directory");
+ }
+ 
++void
++cb_depend (cpp_reader * ARG_UNUSED (pfile), const cpp_dep_pattern *dep)
++{
++  cpp_dep_pattern *copy_dep = cpp_copy_dep_pattern (dep);
++  add_cpp_dep_pattern (copy_dep);
++}
++
+ /* Set the C 89 standard (with 1994 amendments if C94, without GNU
+    extensions if ISO).  There is no concept of gnu94.  */
+ static void
+diff --git a/gcc/c/c-typeck.cc b/gcc/c/c-typeck.cc
+index aa368a6e95a..cd95430b5d7 100644
+--- a/gcc/c/c-typeck.cc
++++ b/gcc/c/c-typeck.cc
+@@ -4433,7 +4433,7 @@ build_function_call_vec (location_t loc, vec<location_t> arg_loc,
+   /* Check that arguments to builtin functions match the expectations.  */
+   if (fundecl
+       && fndecl_built_in_p (fundecl)
+-      && !check_builtin_function_arguments (loc, arg_loc, fundecl,
++      && !check_builtin_function_arguments (loc, arg_loc, NULL, fundecl,
+ 					    orig_fundecl, nargs, argarray))
+     return error_mark_node;
+ 
+diff --git a/gcc/cp/ChangeLog b/gcc/cp/ChangeLog
+index 52fbbfaed94..065875253d2 100644
+--- a/gcc/cp/ChangeLog
++++ b/gcc/cp/ChangeLog
+@@ -1,3 +1,17 @@
++2026-04-23  Bjorkus "ThePhD" Dorkus  <phdofthehouse@gmail.com>
++
++	* call.cc (magic_varargs_p): add BUILT_IN_STD_EMBED as variable
++	argument type that does not do traditional argument checking.
++	Add new extra argument for check_builtin_function_arguments.
++	* tree.cc (builtin_valid_in_constant_expr_p): BUILT_IN_STD_EMBED added
++	to the list of acknowledged constant expression builtins.
++	* constexpr.cc (struct auto_link_constant_eval_list): new type
++	to ensure tracking constant evaluation tracking.
++	* constexpr.cc (cxx_eval_call_expression): use new type to
++	track constant evaluation call stack.
++	* constexpr.cc (cxx_eval_outermost_constant expr): similar.
++
++
+ 2026-04-22  Jason Merrill  <jason@redhat.com>
+ 
+ 	PR c++/124973
+diff --git a/gcc/cp/call.cc b/gcc/cp/call.cc
+index 92c3a23ab8d..460da1a291c 100644
+--- a/gcc/cp/call.cc
++++ b/gcc/cp/call.cc
+@@ -9861,6 +9861,7 @@ magic_varargs_p (tree fn)
+       case BUILT_IN_CONSTANT_P:
+       case BUILT_IN_NEXT_ARG:
+       case BUILT_IN_VA_START:
++      case BUILT_IN_STD_EMBED:
+ 	return 1;
+ 
+       case BUILT_IN_ADD_OVERFLOW_P:
+@@ -11555,9 +11556,9 @@ build_cxx_call (tree fn, int nargs, tree *argarray,
+       for (i = 0; i < nargs; i++)
+ 	argarray[i] = maybe_constant_value (argarray[i]);
+ 
+-      if (!check_builtin_function_arguments (EXPR_LOCATION (fn), vNULL, fndecl,
+-					     orig_fndecl, nargs, argarray,
+-					     complain & tf_error))
++      if (!check_builtin_function_arguments (EXPR_LOCATION (fn), vNULL, &fn,
++					     fndecl, orig_fndecl, nargs,
++					     argarray, complain & tf_error))
+ 	return error_mark_node;
+       else if (fndecl_built_in_p (fndecl, BUILT_IN_CLEAR_PADDING))
+ 	{
+diff --git a/gcc/cp/constexpr.cc b/gcc/cp/constexpr.cc
+index a593b66dd41..cbbee9df285 100644
+--- a/gcc/cp/constexpr.cc
++++ b/gcc/cp/constexpr.cc
+@@ -54,6 +54,30 @@ static HOST_WIDE_INT find_array_ctor_elt (tree ary, tree dindex,
+ 					  bool insert = false);
+ static int array_index_cmp (tree key, tree index);
+ 
++struct auto_link_constant_eval_list
++  {
++    global_constant_evaluation_link link;
++
++    auto_link_constant_eval_list (tree t, bool outermost = false) : link{NULL, NULL, t}
++      {
++	link.value = tree_strip_nop_conversions (t);
++	if (link.value == NULL_TREE || (!outermost && TREE_CODE (link.value) != CALL_EXPR))
++	  {
++	    link.value = NULL_TREE;
++	    return;
++	  }
++	push_constant_eval_list (&link);
++      }
++
++    ~auto_link_constant_eval_list()
++      {
++	if (link.value == NULL_TREE)
++	  return;
++	pop_constant_eval_list (&link);
++      }
++  };
++
++
+ /* Returns true iff FUN is an instantiation of a constexpr function
+    template or a defaulted constexpr function.  */
+ 
+@@ -3938,6 +3962,8 @@ cxx_eval_call_expression (const constexpr_ctx *ctx, tree t,
+   location_t loc = cp_expr_loc_or_input_loc (t);
+   tree fun = get_function_named_in_call (t);
+ 
++  auto_link_constant_eval_list link_handler(t);
++
+   if (fun == NULL_TREE)
+     return cxx_eval_internal_function (ctx, t, lval,
+ 				       non_constant_p, overflow_p,
+@@ -10853,6 +10879,8 @@ cxx_eval_outermost_constant_expr (tree t, bool allow_non_constant,
+ 			allow_non_constant, strict,
+ 			!allow_non_constant ? mce_true : manifestly_const_eval };
+ 
++  auto_link_constant_eval_list link_handler(t, /*outermost*/true);
++
+   /* Turn off -frounding-math for manifestly constant evaluation.  */
+   warning_sentinel rm (flag_rounding_math,
+ 		       ctx.manifestly_const_eval == mce_true);
+diff --git a/gcc/cp/tree.cc b/gcc/cp/tree.cc
+index c510a5bf2d0..acef87c33f8 100644
+--- a/gcc/cp/tree.cc
++++ b/gcc/cp/tree.cc
+@@ -588,6 +588,7 @@ builtin_valid_in_constant_expr_p (const_tree decl)
+     case BUILT_IN_FILE:
+     case BUILT_IN_FUNCTION:
+     case BUILT_IN_LINE:
++    case BUILT_IN_STD_EMBED:
+ 
+       /* The following built-ins are valid in constant expressions
+ 	 when their arguments are.  */
+@@ -1125,7 +1126,6 @@ rvalue (tree expr)
+   return expr;
+ }
+ 
+-
+ struct cplus_array_info
+ {
+   tree type;
+@@ -1475,7 +1475,6 @@ c_build_qualified_type (tree type, int type_quals, tree /* orig_qual_type */,
+   return cp_build_qualified_type (type, type_quals);
+ }
+ 
+-
+ /* Make a variant of TYPE, qualified with the TYPE_QUALS.  Handles
+    arrays correctly.  In particular, if TYPE is an array of T's, and
+    TYPE_QUALS is non-empty, returns an array of qualified T's.
+@@ -2284,7 +2283,7 @@ copy_binfo (tree binfo, tree type, tree t, tree *igo_prev, int virt)
+ 
+   return new_binfo;
+ }
+-
++
+ /* Hashing of lists so that we don't make duplicates.
+    The entry point is `list_hash_canon'.  */
+ 
+@@ -2388,7 +2387,7 @@ hash_tree_chain (tree value, tree chain)
+ {
+   return hash_tree_cons (NULL_TREE, value, chain);
+ }
+-
++
+ void
+ debug_binfo (tree elem)
+ {
+@@ -2844,7 +2843,7 @@ ovl_scope (tree ovl)
+ 
+   return CP_DECL_CONTEXT (ovl);
+ }
+-
++
+ #define PRINT_RING_SIZE 4
+ 
+ static const char *
+@@ -2913,7 +2912,7 @@ cxx_printable_name_translate (tree decl, int v)
+ {
+   return cxx_printable_name_internal (decl, v, true);
+ }
+-
++
+ /* Return the canonical version of exception-specification RAISES for a C++17
+    function type, for use in type comparison and building TYPE_CANONICAL.  */
+ 
+@@ -6714,7 +6713,7 @@ decl_storage_duration (tree decl)
+     return dk_thread;
+   return dk_static;
+ }
+-
++
+ /* EXP is an expression that we want to pre-evaluate.  Returns (in
+    *INITP) an expression that will perform the pre-evaluation.  The
+    value returned by this function is a side-effect free expression
+@@ -7094,7 +7093,6 @@ lookup_annotation (tree attr)
+   return lookup_attribute ("internal ", "annotation ", attr);
+ }
+ 
+-
+ /* Release memory we no longer need after parsing.  */
+ void
+ cp_tree_c_finish_parsing ()
+@@ -7103,7 +7101,7 @@ cp_tree_c_finish_parsing ()
+     invalidate_class_lookup_cache ();
+   deleted_copy_types = NULL;
+ }
+-
++
+ #if defined ENABLE_TREE_CHECKING && (GCC_VERSION >= 2007)
+ /* Complain that some language-specific thing hanging off a tree
+    node has been accessed improperly.  */
+diff --git a/gcc/doc/extend.texi b/gcc/doc/extend.texi
+index 7de7eab3aa5..375fe211553 100644
+--- a/gcc/doc/extend.texi
++++ b/gcc/doc/extend.texi
+@@ -1432,7 +1432,7 @@ instruction. Pointers to this address space are 16 bits wide.
+ These are 16-bit address spaces locating data in section
+ @code{.progmem@var{N}.data} where @var{N} refers to
+ address space @code{__flash@var{N}}.
+-The compiler sets the @code{RAMPZ} segment register appropriately 
++The compiler sets the @code{RAMPZ} segment register appropriately
+ before reading data by means of the @code{ELPM} instruction.
+ 
+ @cindex @code{__flashx} AVR Named Address Spaces
+@@ -1440,7 +1440,7 @@ before reading data by means of the @code{ELPM} instruction.
+ 
+ This is a 24-bit flash address space locating data in section
+ @code{.progmemx.data}.
+-The compiler sets the @code{RAMPZ} segment register appropriately 
++The compiler sets the @code{RAMPZ} segment register appropriately
+ before reading data by means of the @code{ELPM} instruction.
+ 
+ @cindex @code{__memx} AVR Named Address Spaces
+@@ -1482,7 +1482,7 @@ int main (void)
+ 
+ @noindent
+ For each named address space supported by avr-gcc there is an equally
+-named but uppercase built-in macro defined. 
++named but uppercase built-in macro defined.
+ The purpose is to facilitate testing if respective address space
+ support is available or not:
+ 
+@@ -2063,7 +2063,7 @@ more obvious, intuitive, and readable way to request the compiler to
+ adjust the alignment of an entire @code{struct} or @code{union} type.
+ 
+ Note that the effectiveness of @code{aligned} attributes may be
+-limited by inherent limitations in the system linker 
++limited by inherent limitations in the system linker
+ and/or object file format.  On some systems, the
+ linker is only able to arrange for functions or data to be aligned up to a
+ certain maximum alignment.  (For some linkers, the maximum supported
+@@ -2737,10 +2737,10 @@ GCC emits warnings based on this attribute by default; use
+ @itemx warning ("@var{message}")
+ This attribute applies to functions.
+ 
+-If the @code{error} or @code{warning} attribute 
++If the @code{error} or @code{warning} attribute
+ is used on a function declaration and a call to such a function
+-is not eliminated through dead code elimination or other optimizations, 
+-an error or warning (respectively) that includes @var{message} is diagnosed.  
++is not eliminated through dead code elimination or other optimizations,
++an error or warning (respectively) that includes @var{message} is diagnosed.
+ This is useful
+ for compile-time checking, especially together with @code{__builtin_constant_p}
+ and inline functions where checking the inline function arguments is not
+@@ -2775,9 +2775,9 @@ It nullifies
+ the effect of the @option{-fwhole-program} command-line option, so the
+ object remains visible outside the current compilation unit.
+ 
+-If @option{-fwhole-program} is used together with @option{-flto} and 
+-@command{gold} is used as the linker plugin, 
+-@code{externally_visible} attributes are automatically added to functions 
++If @option{-fwhole-program} is used together with @option{-flto} and
++@command{gold} is used as the linker plugin,
++@code{externally_visible} attributes are automatically added to functions
+ (not variables yet due to a current @command{gold} issue)
+ that are accessed outside of LTO objects according to resolution file
+ produced by @command{gold}.
+@@ -3601,7 +3601,7 @@ merged with another semantically equivalent function or variable.
+ @item no_instrument_function
+ This attribute applies to functions.
+ 
+-If any of @option{-finstrument-functions}, @option{-p}, or @option{-pg} are 
++If any of @option{-finstrument-functions}, @option{-p}, or @option{-pg} are
+ given, profiling function calls are
+ generated at entry and exit of most user-compiled functions.
+ Functions with this attribute are not so instrumented.
+@@ -6492,7 +6492,7 @@ guarded by save/clear/restore of the global interrupt enable flag.
+ 
+ The differences to the @code{naked} function attribute are:
+ @itemize @bullet
+-@item @code{naked} functions do not have a return instruction whereas 
++@item @code{naked} functions do not have a return instruction whereas
+ @code{OS_main} and @code{OS_task} functions have a @code{RET} or
+ @code{RETI} return instruction.
+ @item @code{naked} functions do not set up a frame for local variables
+@@ -6906,11 +6906,11 @@ Epiphany targets:
+ @smallexample
+ void __attribute__ ((interrupt)) universal_handler ();
+ void __attribute__ ((interrupt ("dma1"))) dma1_handler ();
+-void __attribute__ ((interrupt ("dma0, dma1"))) 
++void __attribute__ ((interrupt ("dma0, dma1")))
+   universal_dma_handler ();
+ void __attribute__ ((interrupt ("timer0"), disinterrupt))
+   fast_timer_handler ();
+-void __attribute__ ((interrupt ("dma0, dma1"), 
++void __attribute__ ((interrupt ("dma0, dma1"),
+                      forwarder_section ("tramp")))
+   external_dma_handler ();
+ @end smallexample
+@@ -7610,7 +7610,7 @@ explicitly specify any other visibility.
+ GCC's default behavior is to emit all inline functions with the
+ @code{dllexport} attribute.  Since this can cause object file-size bloat,
+ you can use @option{-fno-keep-inline-dllexport}, which tells GCC to
+-ignore the attribute for inlined functions unless the 
++ignore the attribute for inlined functions unless the
+ @option{-fkeep-inline-functions} flag is used instead.
+ 
+ The attribute is ignored for undefined symbols.
+@@ -8087,7 +8087,7 @@ These attributes are supported by the Nvidia PTX back end:
+ This attribute applies to functions.
+ 
+ It indicates that the corresponding function should be compiled
+-as a kernel function, which can be invoked from the host via the CUDA RT 
++as a kernel function, which can be invoked from the host via the CUDA RT
+ library.
+ By default functions are only callable only from other PTX functions.
+ 
+@@ -8843,7 +8843,7 @@ On x86-32 targets, you can use this attribute to control how
+ aggregates are returned in memory.  If the caller is responsible for
+ popping the hidden pointer together with the rest of the arguments, specify
+ @var{number} equal to zero.  If callee is responsible for popping the
+-hidden pointer, specify @var{number} equal to one.  
++hidden pointer, specify @var{number} equal to one.
+ 
+ The default x86-32 ABI assumes that the callee pops the
+ stack for hidden pointer.  However, on x86-32 Microsoft Windows targets,
+@@ -9695,14 +9695,14 @@ void (*foo2)(void);
+ 
+ /* foo's address is assumed to be valid.  */
+ int
+-foo (void) 
++foo (void)
+ @{
+-  /* This call site is not checked for control-flow 
++  /* This call site is not checked for control-flow
+      validity.  */
+   (*foo1)();
+ 
+   /* A warning is issued about attribute mismatch.  */
+-  foo1 = foo2; 
++  foo1 = foo2;
+ 
+   /* This call site is still not checked.  */
+   (*foo1)();
+@@ -9711,7 +9711,7 @@ foo (void)
+   (*foo2)();
+ 
+   /* A warning is issued about attribute mismatch.  */
+-  foo2 = foo1; 
++  foo2 = foo1;
+ 
+   /* This call site is still checked.  */
+   (*foo2)();
+@@ -11309,7 +11309,7 @@ The @code{asm} keyword allows you to embed assembler instructions
+ within C code.  GCC provides two forms of inline @code{asm}
+ statements.  A @dfn{basic @code{asm}} statement is one with no
+ operands (@pxref{Basic Asm}), while an @dfn{extended @code{asm}}
+-statement (@pxref{Extended Asm}) includes one or more operands.  
++statement (@pxref{Extended Asm}) includes one or more operands.
+ The extended form is preferred for mixing C and assembly language
+ within a function and can be used at top level as well with certain
+ restrictions.
+@@ -11324,7 +11324,7 @@ for a C symbol, or to place a C variable in a specific register.
+ * Asm constexprs::     C++11 constant expressions instead of string
+                        literals.
+ * Asm Labels::         Specifying the assembler name to use for a C symbol.
+-* Explicit Register Variables::  Defining variables residing in specified 
++* Explicit Register Variables::  Defining variables residing in specified
+                        registers.
+ * Size of an asm::     How GCC calculates the size of an @code{asm} block.
+ @end menu
+@@ -11350,7 +11350,7 @@ can be used for code compiled with @option{-fno-asm}.
+ @subsubheading Qualifiers
+ @table @code
+ @item volatile
+-The optional @code{volatile} qualifier has no effect. 
++The optional @code{volatile} qualifier has no effect.
+ All basic @code{asm} blocks are implicitly volatile.
+ Basic @code{asm} statements outside of functions may not use any
+ qualifiers.
+@@ -11394,24 +11394,24 @@ file scope (``top-level''), where you can use this technique to emit
+ assembler directives, define assembly language macros that can be invoked
+ elsewhere in the file, or write entire functions in assembly language.
+ 
+-Safely accessing C data and calling functions from basic @code{asm} is more 
+-complex than it may appear. To access C data, it is better to use extended 
++Safely accessing C data and calling functions from basic @code{asm} is more
++complex than it may appear. To access C data, it is better to use extended
+ @code{asm}.
+ 
+-Do not expect a sequence of @code{asm} statements to remain perfectly 
+-consecutive after compilation. If certain instructions need to remain 
++Do not expect a sequence of @code{asm} statements to remain perfectly
++consecutive after compilation. If certain instructions need to remain
+ consecutive in the output, put them in a single multi-instruction @code{asm}
+-statement. Note that GCC's optimizers can move @code{asm} statements 
++statement. Note that GCC's optimizers can move @code{asm} statements
+ relative to other code, including across jumps.
+ 
+-@code{asm} statements may not perform jumps into other @code{asm} statements. 
+-GCC does not know about these jumps, and therefore cannot take 
+-account of them when deciding how to optimize. Jumps from @code{asm} to C 
++@code{asm} statements may not perform jumps into other @code{asm} statements.
++GCC does not know about these jumps, and therefore cannot take
++account of them when deciding how to optimize. Jumps from @code{asm} to C
+ labels are only supported in extended @code{asm}.
+ 
+-Under certain circumstances, GCC may duplicate (or remove duplicates of) your 
+-assembly code when optimizing. This can lead to unexpected duplicate 
+-symbol errors during compilation if your assembly code defines symbols or 
++Under certain circumstances, GCC may duplicate (or remove duplicates of) your
++assembly code when optimizing. This can lead to unexpected duplicate
++symbol errors during compilation if your assembly code defines symbols or
+ labels.
+ 
+ @strong{Warning:} The C standards do not specify semantics for @code{asm},
+@@ -11438,17 +11438,17 @@ extended @code{asm}.  Otherwise you will likely encounter missing symbol
+ errors by linker.  Alternatively you may use
+ @option{-flto-toplevel-asm-heuristics}.
+ 
+-The compiler copies the assembler instructions in a basic @code{asm} 
+-verbatim to the assembly language output file, without 
++The compiler copies the assembler instructions in a basic @code{asm}
++verbatim to the assembly language output file, without
+ processing dialects or any of the @samp{%} operators that are available with
+-extended @code{asm}. This results in minor differences between basic 
+-@code{asm} strings and extended @code{asm} templates. For example, to refer to 
++extended @code{asm}. This results in minor differences between basic
++@code{asm} strings and extended @code{asm} templates. For example, to refer to
+ registers you might use @samp{%eax} in basic @code{asm} and
+ @samp{%%eax} in extended @code{asm}.
+ 
+ On targets such as x86 that support multiple assembler dialects,
+-all basic @code{asm} blocks use the assembler dialect specified by the 
+-@option{-masm} command-line option (@pxref{x86 Options}).  
++all basic @code{asm} blocks use the assembler dialect specified by the
++@option{-masm} command-line option (@pxref{x86 Options}).
+ Basic @code{asm} provides no
+ mechanism to provide different assembler strings for different dialects.
+ 
+@@ -11468,18 +11468,18 @@ Here is an example of basic @code{asm} for i386:
+ @cindex extended @code{asm}
+ @cindex assembly language in C, extended
+ 
+-With extended @code{asm} you can read and write C variables from 
+-assembler and perform jumps from assembler code to C labels.  
++With extended @code{asm} you can read and write C variables from
++assembler and perform jumps from assembler code to C labels.
+ Extended @code{asm} syntax uses colons (@samp{:}) to delimit
+ the operand parameters after the assembler template:
+ 
+ @example
+-asm @var{asm-qualifiers} ( @var{AssemblerTemplate} 
+-                 : @var{OutputOperands} 
++asm @var{asm-qualifiers} ( @var{AssemblerTemplate}
++                 : @var{OutputOperands}
+                  @r{[} : @var{InputOperands}
+                  @r{[} : @var{Clobbers} @r{]} @r{]})
+ 
+-asm @var{asm-qualifiers} ( @var{AssemblerTemplate} 
++asm @var{asm-qualifiers} ( @var{AssemblerTemplate}
+                       : @var{OutputOperands}
+                       : @var{InputOperands}
+                       : @var{Clobbers}
+@@ -11490,16 +11490,16 @@ first form, not).
+ 
+ The @code{asm} keyword is a GNU extension.
+ When writing code that can be compiled with @option{-ansi} and the
+-various @option{-std} options, use @code{__asm__} instead of 
++various @option{-std} options, use @code{__asm__} instead of
+ @code{asm} (@pxref{Alternate Keywords}).
+ 
+ @subsubheading Qualifiers
+ @table @code
+ 
+ @item volatile
+-The typical use of extended @code{asm} statements is to manipulate input 
+-values to produce output values. However, your @code{asm} statements may 
+-also produce side effects. If so, you may need to use the @code{volatile} 
++The typical use of extended @code{asm} statements is to manipulate input
++values to produce output values. However, your @code{asm} statements may
++also produce side effects. If so, you may need to use the @code{volatile}
+ qualifier to disable certain optimizations. @xref{Volatile}.
+ 
+ @item inline
+@@ -11508,7 +11508,7 @@ of the @code{asm} statement is taken as the smallest size possible
+ (@pxref{Size of an asm}).
+ 
+ @item goto
+-This qualifier informs the compiler that the @code{asm} statement may 
++This qualifier informs the compiler that the @code{asm} statement may
+ perform a jump to one of the labels listed in the @var{GotoLabels}.
+ @xref{GotoLabels}.
+ @end table
+@@ -11516,8 +11516,8 @@ perform a jump to one of the labels listed in the @var{GotoLabels}.
+ @subsubheading Parameters
+ @table @var
+ @item AssemblerTemplate
+-This is a literal string that is the template for the assembler code. It is a 
+-combination of fixed text and tokens that refer to the input, output, 
++This is a literal string that is the template for the assembler code. It is a
++combination of fixed text and tokens that refer to the input, output,
+ and goto parameters. @xref{AssemblerTemplate}.
+ 
+ @item OutputOperands
+@@ -11531,28 +11531,28 @@ instructions in the @var{AssemblerTemplate}.  An empty list is permitted.
+ @xref{InputOperands}.
+ 
+ @item Clobbers
+-A comma-separated list of registers or other values changed by the 
++A comma-separated list of registers or other values changed by the
+ @var{AssemblerTemplate}, beyond those listed as outputs.
+ An empty list is permitted.  @xref{Clobbers and Scratch Registers}.
+ 
+ @item GotoLabels
+-When you are using the @code{goto} form of @code{asm}, this section contains 
+-the list of all C labels to which the code in the 
+-@var{AssemblerTemplate} may jump. 
++When you are using the @code{goto} form of @code{asm}, this section contains
++the list of all C labels to which the code in the
++@var{AssemblerTemplate} may jump.
+ @xref{GotoLabels}.
+ 
+ @code{asm} statements may not perform jumps into other @code{asm} statements,
+ only to the listed @var{GotoLabels}.
+-GCC's optimizers do not know about other jumps; therefore they cannot take 
++GCC's optimizers do not know about other jumps; therefore they cannot take
+ account of them when deciding how to optimize.
+ @end table
+ 
+ The total number of input + output + goto operands is limited to 30.
+ 
+ @subsubheading Remarks
+-The @code{asm} statement allows you to include assembly instructions directly 
+-within C code. This may help you to maximize performance in time-sensitive 
+-code or to access assembly instructions that are not readily available to C 
++The @code{asm} statement allows you to include assembly instructions directly
++within C code. This may help you to maximize performance in time-sensitive
++code or to access assembly instructions that are not readily available to C
+ programs.
+ 
+ Similarly to basic @code{asm}, extended @code{asm} statements may be used
+@@ -11565,21 +11565,21 @@ qualifiers, may not specify clobbers, may not use @code{%}, @code{+} or
+ @code{&} modifiers in constraints and can only use constraints which don't
+ allow using any register.
+ 
+-Functions declared with the @code{naked} attribute require basic 
++Functions declared with the @code{naked} attribute require basic
+ @code{asm} (@pxref{Common Attributes}).
+ 
+-While the uses of @code{asm} are many and varied, it may help to think of an 
+-@code{asm} statement as a series of low-level instructions that convert input 
+-parameters to output parameters. So a simple (if not particularly useful) 
++While the uses of @code{asm} are many and varied, it may help to think of an
++@code{asm} statement as a series of low-level instructions that convert input
++parameters to output parameters. So a simple (if not particularly useful)
+ example for i386 using @code{asm} might look like this:
+ 
+ @example
+ int src = 1;
+-int dst;   
++int dst;
+ 
+ asm ("mov %1, %0\n\t"
+     "add $1, %0"
+-    : "=r" (dst) 
++    : "=r" (dst)
+     : "r" (src));
+ 
+ printf("%d\n", dst);
+@@ -11592,21 +11592,21 @@ This code copies @code{src} to @code{dst} and add 1 to @code{dst}.
+ @cindex volatile @code{asm}
+ @cindex @code{asm} volatile
+ 
+-GCC's optimizers sometimes discard @code{asm} statements if they determine 
+-there is no need for the output variables. Also, the optimizers may move 
+-code out of loops if they believe that the code will always return the same 
+-result (i.e.@: none of its input values change between calls). Using the 
+-@code{volatile} qualifier disables these optimizations. @code{asm} statements 
+-that have no output operands and @code{asm goto} statements, 
++GCC's optimizers sometimes discard @code{asm} statements if they determine
++there is no need for the output variables. Also, the optimizers may move
++code out of loops if they believe that the code will always return the same
++result (i.e.@: none of its input values change between calls). Using the
++@code{volatile} qualifier disables these optimizations. @code{asm} statements
++that have no output operands and @code{asm goto} statements,
+ are implicitly volatile.
+ 
+-This i386 code demonstrates a case that does not use (or require) the 
+-@code{volatile} qualifier. If it is performing assertion checking, this code 
+-uses @code{asm} to perform the validation. Otherwise, @code{dwRes} is 
+-unreferenced by any code. As a result, the optimizers can discard the 
+-@code{asm} statement, which in turn removes the need for the entire 
+-@code{DoCheck} routine. By omitting the @code{volatile} qualifier when it 
+-isn't needed you allow the optimizers to produce the most efficient code 
++This i386 code demonstrates a case that does not use (or require) the
++@code{volatile} qualifier. If it is performing assertion checking, this code
++uses @code{asm} to perform the validation. Otherwise, @code{dwRes} is
++unreferenced by any code. As a result, the optimizers can discard the
++@code{asm} statement, which in turn removes the need for the entire
++@code{DoCheck} routine. By omitting the @code{volatile} qualifier when it
++isn't needed you allow the optimizers to produce the most efficient code
+ possible.
+ 
+ @example
+@@ -11624,9 +11624,9 @@ void DoCheck(uint32_t dwSomeValue)
+ @}
+ @end example
+ 
+-The next example shows a case where the optimizers can recognize that the input 
+-(@code{dwSomeValue}) never changes during the execution of the function and can 
+-therefore move the @code{asm} outside the loop to produce more efficient code. 
++The next example shows a case where the optimizers can recognize that the input
++(@code{dwSomeValue}) never changes during the execution of the function and can
++therefore move the @code{asm} outside the loop to produce more efficient code.
+ Again, using the @code{volatile} qualifier disables this type of optimization.
+ 
+ @example
+@@ -11647,11 +11647,11 @@ void do_print(uint32_t dwSomeValue)
+ @}
+ @end example
+ 
+-The following example demonstrates a case where you need to use the 
+-@code{volatile} qualifier. 
+-It uses the x86 @code{rdtsc} instruction, which reads 
+-the computer's time-stamp counter. Without the @code{volatile} qualifier, 
+-the optimizers might assume that the @code{asm} block will always return the 
++The following example demonstrates a case where you need to use the
++@code{volatile} qualifier.
++It uses the x86 @code{rdtsc} instruction, which reads
++the computer's time-stamp counter. Without the @code{volatile} qualifier,
++the optimizers might assume that the @code{asm} block will always return the
+ same value and therefore optimize away the second call.
+ 
+ @example
+@@ -11661,7 +11661,7 @@ asm volatile ( "rdtsc\n\t"    // Returns the time in EDX:EAX.
+         "shl $32, %%rdx\n\t"  // Shift the upper bits left.
+         "or %%rdx, %0"        // 'Or' in the lower bits.
+         : "=a" (msr)
+-        : 
++        :
+         : "rdx");
+ 
+ printf("msr: %llx\n", msr);
+@@ -11673,19 +11673,19 @@ asm volatile ( "rdtsc\n\t"    // Returns the time in EDX:EAX.
+         "shl $32, %%rdx\n\t"  // Shift the upper bits left.
+         "or %%rdx, %0"        // 'Or' in the lower bits.
+         : "=a" (msr)
+-        : 
++        :
+         : "rdx");
+ 
+ printf("msr: %llx\n", msr);
+ @end example
+ 
+-GCC's optimizers do not treat this code like the non-volatile code in the 
+-earlier examples. They do not move it out of loops or omit it on the 
++GCC's optimizers do not treat this code like the non-volatile code in the
++earlier examples. They do not move it out of loops or omit it on the
+ assumption that the result from a previous call is still valid.
+ 
+ Note that the compiler can move even @code{volatile asm} instructions relative
+-to other code, including across jump instructions. For example, on many 
+-targets there is a system register that controls the rounding mode of 
++to other code, including across jump instructions. For example, on many
++targets there is a system register that controls the rounding mode of
+ floating-point operations. Setting it with a @code{volatile asm} statement,
+ as in the following PowerPC example, does not work reliably.
+ 
+@@ -11704,10 +11704,10 @@ asm volatile ("mtfsf 255,%1" : "=X" (sum) : "f" (fpenv));
+ sum = x + y;
+ @end example
+ 
+-Under certain circumstances, GCC may duplicate (or remove duplicates of) your 
+-assembly code when optimizing. This can lead to unexpected duplicate symbol 
+-errors during compilation if your @code{asm} code defines symbols or labels. 
+-Using @samp{%=} 
++Under certain circumstances, GCC may duplicate (or remove duplicates of) your
++assembly code when optimizing. This can lead to unexpected duplicate symbol
++errors during compilation if your @code{asm} code defines symbols or labels.
++Using @samp{%=}
+ (@pxref{AssemblerTemplate}) may help resolve this problem.
+ 
+ @anchor{AssemblerTemplate}
+@@ -11718,52 +11718,52 @@ An assembler template is a literal string containing assembler instructions.
+ In C++ with @option{-std=gnu++11} or later, the assembler template can
+ also be a constant expression inside parentheses (see @ref{Asm constexprs}).
+ 
+-The compiler replaces tokens in the template that refer 
++The compiler replaces tokens in the template that refer
+ to inputs, outputs, and goto labels,
+-and then outputs the resulting string to the assembler. The 
+-string can contain any instructions recognized by the assembler, including 
+-directives. GCC does not parse the assembler instructions 
+-themselves and does not know what they mean or even whether they are valid 
+-assembler input. However, it does count the statements 
++and then outputs the resulting string to the assembler. The
++string can contain any instructions recognized by the assembler, including
++directives. GCC does not parse the assembler instructions
++themselves and does not know what they mean or even whether they are valid
++assembler input. However, it does count the statements
+ (@pxref{Size of an asm}).
+ 
+-You may place multiple assembler instructions together in a single @code{asm} 
+-string, separated by the characters normally used in assembly code for the 
+-system. A combination that works in most places is a newline to break the 
+-line, plus a tab character to move to the instruction field (written as 
+-@samp{\n\t}). 
+-Some assemblers allow semicolons as a line separator. However, note 
+-that some assembler dialects use semicolons to start a comment. 
+-
+-Do not expect a sequence of @code{asm} statements to remain perfectly 
+-consecutive after compilation, even when you are using the @code{volatile} 
+-qualifier. If certain instructions need to remain consecutive in the output, 
++You may place multiple assembler instructions together in a single @code{asm}
++string, separated by the characters normally used in assembly code for the
++system. A combination that works in most places is a newline to break the
++line, plus a tab character to move to the instruction field (written as
++@samp{\n\t}).
++Some assemblers allow semicolons as a line separator. However, note
++that some assembler dialects use semicolons to start a comment.
++
++Do not expect a sequence of @code{asm} statements to remain perfectly
++consecutive after compilation, even when you are using the @code{volatile}
++qualifier. If certain instructions need to remain consecutive in the output,
+ put them in a single multi-instruction @code{asm} statement.
+ 
+-Accessing data from C programs without using input/output operands (such as 
+-by using global symbols directly from the assembler template) may not work as 
+-expected. Similarly, calling functions directly from an assembler template 
++Accessing data from C programs without using input/output operands (such as
++by using global symbols directly from the assembler template) may not work as
++expected. Similarly, calling functions directly from an assembler template
+ requires a detailed understanding of the target assembler and ABI.
+ 
+ Since GCC does not parse the assembler template,
+-it has no visibility of any 
+-symbols it references. This may result in GCC discarding those symbols as 
++it has no visibility of any
++symbols it references. This may result in GCC discarding those symbols as
+ unreferenced unless they are also listed as input, output, or goto operands.
+ 
+ @subsubheading Special format strings
+ 
+-In addition to the tokens described by the input, output, and goto operands, 
++In addition to the tokens described by the input, output, and goto operands,
+ these tokens have special meanings in the assembler template:
+ 
+ @table @samp
+-@item %% 
++@item %%
+ Outputs a single @samp{%} into the assembler code.
+ 
+-@item %= 
+-Outputs a number that is unique to each instance of the @code{asm} 
+-statement in the entire compilation. This option is useful when creating local 
+-labels and referring to them multiple times in a single template that 
+-generates multiple assembler instructions. 
++@item %=
++Outputs a number that is unique to each instance of the @code{asm}
++statement in the entire compilation. This option is useful when creating local
++labels and referring to them multiple times in a single template that
++generates multiple assembler instructions.
+ 
+ @item %@{
+ @itemx %|
+@@ -11776,30 +11776,30 @@ meaning to indicate multiple assembler dialects, as described below.
+ @subsubheading Multiple assembler dialects in @code{asm} templates
+ 
+ On targets such as x86, GCC supports multiple assembler dialects.
+-The @option{-masm} option controls which dialect GCC uses as its 
+-default for inline assembler. The target-specific documentation for the 
+-@option{-masm} option contains the list of supported dialects, as well as the 
+-default dialect if the option is not specified. This information may be 
+-important to understand, since assembler code that works correctly when 
++The @option{-masm} option controls which dialect GCC uses as its
++default for inline assembler. The target-specific documentation for the
++@option{-masm} option contains the list of supported dialects, as well as the
++default dialect if the option is not specified. This information may be
++important to understand, since assembler code that works correctly when
+ compiled using one dialect will likely fail if compiled using another.
+ @xref{x86 Options}.
+ 
+-If your code needs to support multiple assembler dialects (for example, if 
+-you are writing public headers that need to support a variety of compilation 
++If your code needs to support multiple assembler dialects (for example, if
++you are writing public headers that need to support a variety of compilation
+ options), use constructs of this form:
+ 
+ @example
+ @{ dialect0 | dialect1 | dialect2... @}
+ @end example
+ 
+-This construct outputs @code{dialect0} 
+-when using dialect #0 to compile the code, 
+-@code{dialect1} for dialect #1, etc. If there are fewer alternatives within the 
+-braces than the number of dialects the compiler supports, the construct 
++This construct outputs @code{dialect0}
++when using dialect #0 to compile the code,
++@code{dialect1} for dialect #1, etc. If there are fewer alternatives within the
++braces than the number of dialects the compiler supports, the construct
+ outputs nothing.
+ 
+ For example, if an x86 compiler supports two dialects
+-(@samp{att}, @samp{intel}), an 
++(@samp{att}, @samp{intel}), an
+ assembler template such as this:
+ 
+ @example
+@@ -11837,8 +11837,8 @@ There is no support for nesting dialect alternatives.
+ An @code{asm} statement has zero or more output operands indicating the names
+ of C variables modified by the assembler code.
+ 
+-In this i386 example, @code{old} (referred to in the template string as 
+-@code{%0}) and @code{*Base} (as @code{%1}) are outputs and @code{Offset} 
++In this i386 example, @code{old} (referred to in the template string as
++@code{%0}) and @code{*Base} (as @code{%1}) are outputs and @code{Offset}
+ (@code{%2}) is an input:
+ 
+ @example
+@@ -11867,37 +11867,37 @@ in the operand specification and references to the operand in the assembler
+ template, i.e.@: @samp{%[Value]}.
+ The scope of the name is the @code{asm} statement
+ that contains the definition. Any valid C identifier is acceptable,
+-including names already defined in the surrounding code. No two operands 
++including names already defined in the surrounding code. No two operands
+ within the same @code{asm} statement can use the same symbolic name.
+ 
+ When not using an @var{asmSymbolicName}, use the (zero-based) position
+-of the operand 
+-in the list of operands in the assembler template. For example if there are 
+-three output operands, use @samp{%0} in the template to refer to the first, 
+-@samp{%1} for the second, and @samp{%2} for the third. 
++of the operand
++in the list of operands in the assembler template. For example if there are
++three output operands, use @samp{%0} in the template to refer to the first,
++@samp{%1} for the second, and @samp{%2} for the third.
+ 
+ @item constraint
+-A string constant specifying constraints on the placement of the operand; 
++A string constant specifying constraints on the placement of the operand;
+ @xref{Constraints}, for details.
+ In C++ with @option{-std=gnu++11} or later, the constraint can
+ also be a constant expression inside parentheses (see @ref{Asm constexprs}).
+ 
+-Output constraints must begin with either @samp{=} (a variable overwriting an 
+-existing value) or @samp{+} (when reading and writing). When using 
++Output constraints must begin with either @samp{=} (a variable overwriting an
++existing value) or @samp{+} (when reading and writing). When using
+ @samp{=}, do not assume the location contains the existing value
+-on entry to the @code{asm}, except 
++on entry to the @code{asm}, except
+ when the operand is tied to an input; @pxref{InputOperands,,Input Operands}.
+ 
+-After the prefix, there must be one or more additional constraints 
+-(@pxref{Constraints}) that describe where the value resides. Common 
+-constraints include @samp{r} for register and @samp{m} for memory. 
++After the prefix, there must be one or more additional constraints
++(@pxref{Constraints}) that describe where the value resides. Common
++constraints include @samp{r} for register and @samp{m} for memory.
+ When you list more than one possible location (for example, @code{"=rm"}),
+-the compiler chooses the most efficient one based on the current context. 
+-If you list as many alternates as the @code{asm} statement allows, you permit 
+-the optimizers to produce the best possible code. 
++the compiler chooses the most efficient one based on the current context.
++If you list as many alternates as the @code{asm} statement allows, you permit
++the optimizers to produce the best possible code.
+ If you must use a specific register, but your Machine Constraints do not
+-provide sufficient control to select the specific register you want, 
+-local register variables may provide a solution (@pxref{Local Register 
++provide sufficient control to select the specific register you want,
++local register variables may provide a solution (@pxref{Local Register
+ Variables}).
+ 
+ @item cvariablename
+@@ -11906,57 +11906,57 @@ The enclosing parentheses are a required part of the syntax.
+ 
+ @end table
+ 
+-When the compiler selects the registers to use to 
+-represent the output operands, it does not use any of the clobbered registers 
++When the compiler selects the registers to use to
++represent the output operands, it does not use any of the clobbered registers
+ (@pxref{Clobbers and Scratch Registers}).
+ 
+-Output operand expressions must be lvalues. The compiler cannot check whether 
+-the operands have data types that are reasonable for the instruction being 
+-executed. For output expressions that are not directly addressable (for 
+-example a bit-field), the constraint must allow a register. In that case, GCC 
+-uses the register as the output of the @code{asm}, and then stores that 
+-register into the output. 
++Output operand expressions must be lvalues. The compiler cannot check whether
++the operands have data types that are reasonable for the instruction being
++executed. For output expressions that are not directly addressable (for
++example a bit-field), the constraint must allow a register. In that case, GCC
++uses the register as the output of the @code{asm}, and then stores that
++register into the output.
+ 
+-Operands using the @samp{+} constraint modifier count as two operands 
++Operands using the @samp{+} constraint modifier count as two operands
+ (that is, both as input and output) towards the total maximum of 30 operands
+ per @code{asm} statement.
+ 
+ Use the @samp{&} constraint modifier (@pxref{Modifiers}) on all output
+-operands that must not overlap an input.  Otherwise, 
+-GCC may allocate the output operand in the same register as an unrelated 
+-input operand, on the assumption that the assembler code consumes its 
+-inputs before producing outputs. This assumption may be false if the assembler 
++operands that must not overlap an input.  Otherwise,
++GCC may allocate the output operand in the same register as an unrelated
++input operand, on the assumption that the assembler code consumes its
++inputs before producing outputs. This assumption may be false if the assembler
+ code actually consists of more than one instruction.
+ 
+-The same problem can occur if one output parameter (@var{a}) allows a register 
++The same problem can occur if one output parameter (@var{a}) allows a register
+ constraint and another output parameter (@var{b}) allows a memory constraint.
+ The code generated by GCC to access the memory address in @var{b} can contain
+-registers which @emph{might} be shared by @var{a}, and GCC considers those 
++registers which @emph{might} be shared by @var{a}, and GCC considers those
+ registers to be inputs to the asm. As above, GCC assumes that such input
+-registers are consumed before any outputs are written. This assumption may 
++registers are consumed before any outputs are written. This assumption may
+ result in incorrect behavior if the @code{asm} statement writes to @var{a}
+ before using
+ @var{b}. Combining the @samp{&} modifier with the register constraint on @var{a}
+-ensures that modifying @var{a} does not affect the address referenced by 
+-@var{b}. Otherwise, the location of @var{b} 
++ensures that modifying @var{a} does not affect the address referenced by
++@var{b}. Otherwise, the location of @var{b}
+ is undefined if @var{a} is modified before using @var{b}.
+ 
+-@code{asm} supports operand modifiers on operands (for example @samp{%k2} 
++@code{asm} supports operand modifiers on operands (for example @samp{%k2}
+ instead of simply @samp{%2}). @ref{GenericOperandmodifiers,
+ Generic Operand modifiers} lists the modifiers that are available
+ on all targets.  Other modifiers are hardware dependent.
+ For example, the list of supported modifiers for x86 is found at
+ @ref{x86Operandmodifiers,x86 Operand modifiers}.
+ 
+-If the C code that follows the @code{asm} makes no use of any of the output 
+-operands, use @code{volatile} for the @code{asm} statement to prevent the 
+-optimizers from discarding the @code{asm} statement as unneeded 
++If the C code that follows the @code{asm} makes no use of any of the output
++operands, use @code{volatile} for the @code{asm} statement to prevent the
++optimizers from discarding the @code{asm} statement as unneeded
+ (see @ref{Volatile}).
+ 
+-This code makes no use of the optional @var{asmSymbolicName}. Therefore it 
+-references the first output operand as @code{%0} (were there a second, it 
+-would be @code{%1}, etc). The number of the first input operand is one greater 
+-than that of the last output operand. In this i386 example, that makes 
++This code makes no use of the optional @var{asmSymbolicName}. Therefore it
++references the first output operand as @code{%0} (were there a second, it
++would be @code{%1}, etc). The number of the first input operand is one greater
++than that of the last output operand. In this i386 example, that makes
+ @code{Mask} referenced as @code{%1}:
+ 
+ @example
+@@ -11971,17 +11971,17 @@ uint32_t Index;
+ 
+ That code overwrites the variable @code{Index} (@samp{=}),
+ placing the value in a register (@samp{r}).
+-Using the generic @samp{r} constraint instead of a constraint for a specific 
+-register allows the compiler to pick the register to use, which can result 
+-in more efficient code. This may not be possible if an assembler instruction 
++Using the generic @samp{r} constraint instead of a constraint for a specific
++register allows the compiler to pick the register to use, which can result
++in more efficient code. This may not be possible if an assembler instruction
+ requires a specific register.
+ 
+ The following i386 example uses the @var{asmSymbolicName} syntax.
+-It produces the 
+-same result as the code above, but some may consider it more readable or more 
+-maintainable since reordering index numbers is not necessary when adding or 
++It produces the
++same result as the code above, but some may consider it more readable or more
++maintainable since reordering index numbers is not necessary when adding or
+ removing operands. The names @code{aIndex} and @code{aMask}
+-are only used in this example to emphasize which 
++are only used in this example to emphasize which
+ names get used where.
+ It is acceptable to reuse the names @code{Index} and @code{Mask}.
+ 
+@@ -12007,7 +12007,7 @@ asm ("mov %[e], %[d]"
+    : [e] "rm" (*e));
+ @end example
+ 
+-Here, @code{d} may either be in a register or in memory. Since the compiler 
++Here, @code{d} may either be in a register or in memory. Since the compiler
+ might already have the current value of the @code{uint32_t} location
+ pointed to by @code{e}
+ in a register, you can enable it to choose the best location
+@@ -12142,7 +12142,7 @@ variable.
+ @cindex @code{asm} input operands
+ @cindex @code{asm} expressions
+ 
+-Input operands make values from C variables and expressions available to the 
++Input operands make values from C variables and expressions available to the
+ assembly code.
+ 
+ Operands are separated by commas.  Each operand has this format:
+@@ -12159,47 +12159,47 @@ in the operand specification and references to the operand in the assembler
+ template, i.e.@: @samp{%[Value]}.
+ The scope of the name is the @code{asm} statement
+ that contains the definition. Any valid C identifier is acceptable,
+-including names already defined in the surrounding code. No two operands 
++including names already defined in the surrounding code. No two operands
+ within the same @code{asm} statement can use the same symbolic name.
+ 
+ When not using an @var{asmSymbolicName}, use the (zero-based) position
+-of the operand 
++of the operand
+ in the list of operands in the assembler template. For example if there are
+ two output operands and three inputs,
+ use @samp{%2} in the template to refer to the first input operand,
+-@samp{%3} for the second, and @samp{%4} for the third. 
++@samp{%3} for the second, and @samp{%4} for the third.
+ 
+ @item constraint
+-A string constant specifying constraints on the placement of the operand; 
++A string constant specifying constraints on the placement of the operand;
+ @xref{Constraints}, for details.
+ In C++ with @option{-std=gnu++11} or later, the constraint can
+ also be a constant expression inside parentheses (see @ref{Asm constexprs}).
+ 
+ Input constraint strings may not begin with either @samp{=} or @samp{+}.
+-When you list more than one possible location (for example, @samp{"irm"}), 
++When you list more than one possible location (for example, @samp{"irm"}),
+ the compiler chooses the most efficient one based on the current context.
+ If you must use a specific register, but your Machine Constraints do not
+-provide sufficient control to select the specific register you want, 
+-local register variables may provide a solution (@pxref{Local Register 
++provide sufficient control to select the specific register you want,
++local register variables may provide a solution (@pxref{Local Register
+ Variables}).
+ 
+-Input constraints can also be digits (for example, @code{"0"}). This indicates 
+-that the specified input must be in the same place as the output constraint 
+-at the (zero-based) index in the output constraint list. 
++Input constraints can also be digits (for example, @code{"0"}). This indicates
++that the specified input must be in the same place as the output constraint
++at the (zero-based) index in the output constraint list.
+ When using @var{asmSymbolicName} syntax for the output operands,
+ you may use these names (enclosed in brackets @samp{[]}) instead of digits.
+ 
+ @item cexpression
+-This is the C variable or expression being passed to the @code{asm} statement 
++This is the C variable or expression being passed to the @code{asm} statement
+ as input.  The enclosing parentheses are a required part of the syntax.
+ 
+ @end table
+ 
+-When the compiler selects the registers to use to represent the input 
++When the compiler selects the registers to use to represent the input
+ operands, it does not use any of the clobbered registers
+ (@pxref{Clobbers and Scratch Registers}).
+ 
+-If there are no output operands but there are input operands, place two 
++If there are no output operands but there are input operands, place two
+ consecutive colons where the output operands would go:
+ 
+ @example
+@@ -12208,45 +12208,45 @@ __asm__ ("some instructions"
+    : "r" (Offset / 8));
+ @end example
+ 
+-@strong{Warning:} Do @emph{not} modify the contents of input-only operands 
+-(except for inputs tied to outputs). The compiler assumes that on exit from 
+-the @code{asm} statement these operands contain the same values as they 
+-had before executing the statement. 
++@strong{Warning:} Do @emph{not} modify the contents of input-only operands
++(except for inputs tied to outputs). The compiler assumes that on exit from
++the @code{asm} statement these operands contain the same values as they
++had before executing the statement.
+ It is @emph{not} possible to use clobbers
+-to inform the compiler that the values in these inputs are changing. One 
+-common work-around is to tie the changing input variable to an output variable 
+-that never gets used. Note, however, that if the code that follows the 
+-@code{asm} statement makes no use of any of the output operands, the GCC 
+-optimizers may discard the @code{asm} statement as unneeded 
++to inform the compiler that the values in these inputs are changing. One
++common work-around is to tie the changing input variable to an output variable
++that never gets used. Note, however, that if the code that follows the
++@code{asm} statement makes no use of any of the output operands, the GCC
++optimizers may discard the @code{asm} statement as unneeded
+ (see @ref{Volatile}).
+ 
+-@code{asm} supports operand modifiers on operands (for example @samp{%k2} 
++@code{asm} supports operand modifiers on operands (for example @samp{%k2}
+ instead of simply @samp{%2}). @ref{GenericOperandmodifiers,
+ Generic Operand modifiers} lists the modifiers that are available
+ on all targets.  Other modifiers are hardware dependent.
+ For example, the list of supported modifiers for x86 is found at
+ @ref{x86Operandmodifiers,x86 Operand modifiers}.
+ 
+-In this example using the fictitious @code{combine} instruction, the 
+-constraint @code{"0"} for input operand 1 says that it must occupy the same 
+-location as output operand 0. Only input operands may use numbers in 
+-constraints, and they must each refer to an output operand. Only a number (or 
+-the symbolic assembler name) in the constraint can guarantee that one operand 
+-is in the same place as another. The mere fact that @code{foo} is the value of 
+-both operands is not enough to guarantee that they are in the same place in 
++In this example using the fictitious @code{combine} instruction, the
++constraint @code{"0"} for input operand 1 says that it must occupy the same
++location as output operand 0. Only input operands may use numbers in
++constraints, and they must each refer to an output operand. Only a number (or
++the symbolic assembler name) in the constraint can guarantee that one operand
++is in the same place as another. The mere fact that @code{foo} is the value of
++both operands is not enough to guarantee that they are in the same place in
+ the generated assembler code.
+ 
+ @example
+-asm ("combine %2, %0" 
+-   : "=r" (foo) 
++asm ("combine %2, %0"
++   : "=r" (foo)
+    : "0" (foo), "g" (bar));
+ @end example
+ 
+ Here is an example using symbolic names.
+ 
+ @example
+-asm ("cmoveq %1, %2, %[result]" 
+-   : [result] "=r"(result) 
++asm ("cmoveq %1, %2, %[result]"
++   : [result] "=r"(result)
+    : "r" (test), "r" (new), "[result]" (old));
+ @end example
+ 
+@@ -12255,28 +12255,28 @@ asm ("cmoveq %1, %2, %[result]"
+ @cindex @code{asm} clobbers
+ @cindex @code{asm} scratch registers
+ 
+-While the compiler is aware of changes to entries listed in the output 
+-operands, the inline @code{asm} code may modify more than just the outputs. For 
+-example, calculations may require additional registers, or the processor may 
+-overwrite a register as a side effect of a particular assembler instruction. 
+-In order to inform the compiler of these changes, list them in the clobber 
+-list. Clobber list items are either register names or the special clobbers 
+-(listed below). Each clobber list item is a string constant 
++While the compiler is aware of changes to entries listed in the output
++operands, the inline @code{asm} code may modify more than just the outputs. For
++example, calculations may require additional registers, or the processor may
++overwrite a register as a side effect of a particular assembler instruction.
++In order to inform the compiler of these changes, list them in the clobber
++list. Clobber list items are either register names or the special clobbers
++(listed below). Each clobber list item is a string constant
+ enclosed in double quotes and separated by commas.
+ In C++ with @option{-std=gnu++11} or later, a clobber list item can
+ also be a constant expression inside parentheses (see @ref{Asm constexprs}).
+ 
+-Clobber descriptions may not in any way overlap with an input or output 
+-operand. For example, you may not have an operand describing a register class 
+-with one member when listing that register in the clobber list. Variables 
+-declared to live in specific registers (@pxref{Explicit Register 
+-Variables}) and used 
+-as @code{asm} input or output operands must have no part mentioned in the 
+-clobber description. In particular, there is no way to specify that input 
++Clobber descriptions may not in any way overlap with an input or output
++operand. For example, you may not have an operand describing a register class
++with one member when listing that register in the clobber list. Variables
++declared to live in specific registers (@pxref{Explicit Register
++Variables}) and used
++as @code{asm} input or output operands must have no part mentioned in the
++clobber description. In particular, there is no way to specify that input
+ operands get modified without also specifying them as output operands.
+ 
+-When the compiler selects which registers to use to represent input and output 
+-operands, it does not use any of the clobbered registers. As a result, 
++When the compiler selects which registers to use to represent input and output
++operands, it does not use any of the clobbered registers. As a result,
+ clobbered registers are available for any use in the assembler code.
+ 
+ Another restriction is that the clobber list should not contain the
+@@ -12288,8 +12288,8 @@ pointer to appear in the list, with unclear semantics.  This behavior
+ is deprecated and listing the stack pointer may become an error in
+ future versions of GCC@.
+ 
+-Here is a realistic example for the VAX showing the use of clobbered 
+-registers: 
++Here is a realistic example for the VAX showing the use of clobbered
++registers:
+ 
+ @example
+ asm volatile ("movc3 %0, %1, %2"
+@@ -12302,28 +12302,28 @@ Also, there are three special clobber arguments:
+ 
+ @table @code
+ @item "cc"
+-The @code{"cc"} clobber indicates that the assembler code modifies the flags 
+-register. On some machines, GCC represents the condition codes as a specific 
++The @code{"cc"} clobber indicates that the assembler code modifies the flags
++register. On some machines, GCC represents the condition codes as a specific
+ hardware register; @code{"cc"} serves to name this register.
+-On other machines, condition code handling is different, 
+-and specifying @code{"cc"} has no effect. But 
++On other machines, condition code handling is different,
++and specifying @code{"cc"} has no effect. But
+ it is valid no matter what the target.
+ 
+ @item "memory"
+ The @code{"memory"} clobber tells the compiler that the assembly code
+-performs memory 
+-reads or writes to items other than those listed in the input and output 
+-operands (for example, accessing the memory pointed to by one of the input 
+-parameters). To ensure memory contains correct values, GCC may need to flush 
+-specific register values to memory before executing the @code{asm}. Further, 
+-the compiler does not assume that any values read from memory before an 
+-@code{asm} remain unchanged after that @code{asm}; it reloads them as 
+-needed.  
++performs memory
++reads or writes to items other than those listed in the input and output
++operands (for example, accessing the memory pointed to by one of the input
++parameters). To ensure memory contains correct values, GCC may need to flush
++specific register values to memory before executing the @code{asm}. Further,
++the compiler does not assume that any values read from memory before an
++@code{asm} remain unchanged after that @code{asm}; it reloads them as
++needed.
+ Using the @code{"memory"} clobber effectively forms a read/write
+ memory barrier for the compiler.
+ 
+-Note that this clobber does not prevent the @emph{processor} from doing 
+-speculative reads past the @code{asm} statement. To prevent that, you need 
++Note that this clobber does not prevent the @emph{processor} from doing
++speculative reads past the @code{asm} statement. To prevent that, you need
+ processor-specific fence instructions.
+ 
+ @item "redzone"
+@@ -12479,18 +12479,18 @@ dgemv_kernel_4x4 (long n, const double *ap, long lda,
+ @cindex @code{asm} goto labels
+ 
+ @code{asm goto} allows assembly code to jump to one or more C labels.  The
+-@var{GotoLabels} section in an @code{asm goto} statement contains 
+-a comma-separated 
+-list of all C labels to which the assembler code may jump. GCC assumes that 
+-@code{asm} execution falls through to the next statement (if this is not the 
+-case, consider using the @code{__builtin_unreachable} intrinsic after the 
+-@code{asm} statement). Optimization of @code{asm goto} may be improved by 
++@var{GotoLabels} section in an @code{asm goto} statement contains
++a comma-separated
++list of all C labels to which the assembler code may jump. GCC assumes that
++@code{asm} execution falls through to the next statement (if this is not the
++case, consider using the @code{__builtin_unreachable} intrinsic after the
++@code{asm} statement). Optimization of @code{asm goto} may be improved by
+ using the @code{hot} and @code{cold} label attributes (@pxref{Common
+ Attributes}).
+ 
+-If the assembler code does modify anything, use the @code{"memory"} clobber 
+-to force the 
+-optimizers to flush all register values to memory and reload them if 
++If the assembler code does modify anything, use the @code{"memory"} clobber
++to force the
++optimizers to flush all register values to memory and reload them if
+ necessary after the @code{asm} statement.
+ 
+ Also note that an @code{asm goto} statement is always implicitly
+@@ -12528,8 +12528,8 @@ asm goto (
+     "btl %1, %0\n\t"
+     "jc %l2"
+     : /* No outputs. */
+-    : "r" (p1), "r" (p2) 
+-    : "cc" 
++    : "r" (p1), "r" (p2)
++    : "cc"
+     : carry);
+ 
+ return 0;
+@@ -12547,7 +12547,7 @@ int frob(int x)
+   asm goto ("frob %%r5, %1; jc %l[error]; mov (%2), %%r5"
+             : /* No outputs. */
+             : "r"(x), "r"(&y)
+-            : "r5", "memory" 
++            : "r5", "memory"
+             : error);
+   return y;
+ error:
+@@ -12648,9 +12648,9 @@ a @code{z} prefix).  This is a no-op for SVE register operands.
+ @subsubsection x86 Operand Modifiers
+ 
+ References to input, output, and goto operands in the assembler template
+-of extended @code{asm} statements can use 
+-modifiers to affect the way the operands are formatted in 
+-the code output to the assembler. For example, the 
++of extended @code{asm} statements can use
++modifiers to affect the way the operands are formatted in
++the code output to the assembler. For example, the
+ following code uses the @samp{h} and @samp{b} modifiers for x86:
+ 
+ @example
+@@ -12768,7 +12768,7 @@ issue the bare constant. See @code{p} above.
+ @tab Print the opcode suffix for the size of the current integer operand (one of @code{b}/@code{w}/@code{l}/@code{q}).
+ @tab @code{%z0}
+ @tab @code{l}
+-@tab 
++@tab
+ @end multitable
+ 
+ @code{V} is a special modifier which prints the name of the full integer
+@@ -12861,7 +12861,7 @@ asm ("fsincos" : "=t" (cos), "=u" (sin) : "0" (inp));
+ 
+ @noindent
+ This @code{asm} takes two inputs, which are popped by the @code{fyl2xp1} opcode,
+-and replaces them with one output.  The @code{st(1)} clobber is necessary 
++and replaces them with one output.  The @code{st(1)} clobber is necessary
+ for the compiler to know that @code{fyl2xp1} pops both inputs.
+ 
+ @smallexample
+@@ -13066,19 +13066,19 @@ On systems where an underscore is normally prepended to the name of a C
+ variable, this feature allows you to define names for the
+ linker that do not start with an underscore.
+ 
+-GCC does not support using this feature with a non-static local variable 
++GCC does not support using this feature with a non-static local variable
+ since such variables do not have assembler names.  If you are
+-trying to put the variable in a particular register, see 
++trying to put the variable in a particular register, see
+ @ref{Explicit Register Variables}.
+ 
+ @subsubheading Assembler names for functions
+ 
+-To specify the assembler name for functions, write a declaration for the 
++To specify the assembler name for functions, write a declaration for the
+ function before its definition and put @code{asm} there, like this:
+ 
+ @smallexample
+ int func (int x, int y) asm ("MYFUNC");
+-     
++
+ int func (int x, int y)
+ @{
+    /* @r{@dots{}} */
+@@ -13095,10 +13095,10 @@ the assembler code should be @code{MYFUNC}.
+ @cindex variables in specified registers
+ @cindex specified registers
+ 
+-GNU C allows you to associate specific hardware registers with C 
++GNU C allows you to associate specific hardware registers with C
+ variables.  In almost all cases, allowing the compiler to assign
+ registers produces the best code.  However under certain unusual
+-circumstances, more precise control over the variable storage is 
++circumstances, more precise control over the variable storage is
+ required.
+ 
+ Both global and local variables can be associated with a register.  The
+@@ -13118,7 +13118,7 @@ the two, as explained in the sections below.
+ @cindex registers, global variables in
+ @cindex registers, global allocation
+ 
+-You can define a global register variable and associate it with a specified 
++You can define a global register variable and associate it with a specified
+ register like this:
+ 
+ @smallexample
+@@ -13126,10 +13126,10 @@ register int *foo asm ("r12");
+ @end smallexample
+ 
+ @noindent
+-Here @code{r12} is the name of the register that should be used. Note that 
+-this is the same syntax used for defining local register variables, but for 
+-a global variable the declaration appears outside a function. The 
+-@code{register} keyword is required, and cannot be combined with 
++Here @code{r12} is the name of the register that should be used. Note that
++this is the same syntax used for defining local register variables, but for
++a global variable the declaration appears outside a function. The
++@code{register} keyword is required, and cannot be combined with
+ @code{static}. The register name must be a valid register name for the
+ target platform.
+ 
+@@ -13138,11 +13138,11 @@ the outcome may be contrary to expectations.  In  particular, using the
+ @code{volatile} qualifier does not fully prevent the compiler from
+ optimizing accesses to the register.
+ 
+-Registers are a scarce resource on most systems and allowing the 
+-compiler to manage their usage usually results in the best code. However, 
++Registers are a scarce resource on most systems and allowing the
++compiler to manage their usage usually results in the best code. However,
+ under special circumstances it can make sense to reserve some globally.
+-For example this may be useful in programs such as programming language 
+-interpreters that have a couple of global variables that are accessed 
++For example this may be useful in programs such as programming language
++interpreters that have a couple of global variables that are accessed
+ very often.
+ 
+ After defining a global register variable, for the current compilation
+@@ -13167,14 +13167,14 @@ Accesses from basic asms are not supported.
+ @end itemize
+ 
+ Note that these points @emph{only} apply to code that is compiled with the
+-definition. The behavior of code that is merely linked in (for example 
++definition. The behavior of code that is merely linked in (for example
+ code from libraries) is not affected.
+ 
+-If you want to recompile source files that do not actually use your global 
+-register variable so they do not use the specified register for any other 
+-purpose, you need not actually add the global register declaration to 
+-their source code. It suffices to specify the compiler option 
+-@option{-ffixed-@var{reg}} (@pxref{Code Gen Options}) to reserve the 
++If you want to recompile source files that do not actually use your global
++register variable so they do not use the specified register for any other
++purpose, you need not actually add the global register declaration to
++their source code. It suffices to specify the compiler option
++@option{-ffixed-@var{reg}} (@pxref{Code Gen Options}) to reserve the
+ register.
+ 
+ @subsubheading Declaring the variable
+@@ -13182,9 +13182,9 @@ register.
+ Global register variables cannot have initial values, because an
+ executable file has no means to supply initial contents for a register.
+ 
+-When selecting a register, choose one that is normally saved and 
++When selecting a register, choose one that is normally saved and
+ restored by function calls on your machine. This ensures that code
+-which is unaware of this reservation (such as library routines) will 
++which is unaware of this reservation (such as library routines) will
+ restore it before returning.
+ 
+ On machines with register windows, be sure to choose a global
+@@ -13193,18 +13193,18 @@ register that is not affected magically by the function call mechanism.
+ @subsubheading Using the variable
+ 
+ @cindex @code{qsort}, and global register variables
+-When calling routines that are not aware of the reservation, be 
+-cautious if those routines call back into code which uses them. As an 
+-example, if you call the system library version of @code{qsort}, it may 
+-clobber your registers during execution, but (if you have selected 
+-appropriate registers) it will restore them before returning. However 
+-it will @emph{not} restore them before calling @code{qsort}'s comparison 
+-function. As a result, global values will not reliably be available to 
++When calling routines that are not aware of the reservation, be
++cautious if those routines call back into code which uses them. As an
++example, if you call the system library version of @code{qsort}, it may
++clobber your registers during execution, but (if you have selected
++appropriate registers) it will restore them before returning. However
++it will @emph{not} restore them before calling @code{qsort}'s comparison
++function. As a result, global values will not reliably be available to
+ the comparison function unless the @code{qsort} function itself is rebuilt.
+ 
+ Similarly, it is not safe to access the global register variables from signal
+-handlers or from more than one thread of control. Unless you recompile 
+-them specially for the task at hand, the system library routines may 
++handlers or from more than one thread of control. Unless you recompile
++them specially for the task at hand, the system library routines may
+ temporarily use the register for other things.  Furthermore, since the register
+ is not reserved exclusively for the variable, accessing it from handlers of
+ asynchronous signals may observe unrelated temporary values residing in the
+@@ -13230,7 +13230,7 @@ thing happens regardless of what @code{longjmp} does.
+ @cindex specifying registers for local variables
+ @cindex registers for local variables
+ 
+-You can define a local register variable and associate it with a specified 
++You can define a local register variable and associate it with a specified
+ register like this:
+ 
+ @smallexample
+@@ -13239,9 +13239,9 @@ register int *foo asm ("r12");
+ 
+ @noindent
+ Here @code{r12} is the name of the register that should be used.  Note
+-that this is the same syntax used for defining global register variables, 
+-but for a local variable the declaration appears within a function.  The 
+-@code{register} keyword is required, and cannot be combined with 
++that this is the same syntax used for defining global register variables,
++but for a local variable the declaration appears within a function.  The
++@code{register} keyword is required, and cannot be combined with
+ @code{static}.  The register name must be a valid register name for the
+ target platform.
+ 
+@@ -13251,17 +13251,17 @@ the outcome may be contrary to expectations. In particular, when the
+ variable with its initializer in @code{asm} statements, which may cause
+ the corresponding operand to appear in a different register.
+ 
+-As with global register variables, it is recommended that you choose 
+-a register that is normally saved and restored by function calls on your 
++As with global register variables, it is recommended that you choose
++a register that is normally saved and restored by function calls on your
+ machine, so that calls to library routines will not clobber it.
+ 
+ The only supported use for this feature is to specify registers
+-for input and output operands when calling Extended @code{asm} 
+-(@pxref{Extended Asm}).  This may be necessary if the constraints for a 
+-particular machine don't provide sufficient control to select the desired 
+-register.  To force an operand into a register, create a local variable 
+-and specify the register name after the variable's declaration.  Then use 
+-the local variable for the @code{asm} operand and specify any constraint 
++for input and output operands when calling Extended @code{asm}
++(@pxref{Extended Asm}).  This may be necessary if the constraints for a
++particular machine don't provide sufficient control to select the desired
++register.  To force an operand into a register, create a local variable
++and specify the register name after the variable's declaration.  Then use
++the local variable for the @code{asm} operand and specify any constraint
+ letter that matches the register:
+ 
+ @smallexample
+@@ -13271,10 +13271,10 @@ register int *result asm ("r0");
+ asm ("sysint" : "=r" (result) : "0" (p1), "r" (p2));
+ @end smallexample
+ 
+-@emph{Warning:} In the above example, be aware that a register (for example 
+-@code{r0}) can be call-clobbered by subsequent code, including function 
+-calls and library calls for arithmetic operators on other variables (for 
+-example the initialization of @code{p2}).  In this case, use temporary 
++@emph{Warning:} In the above example, be aware that a register (for example
++@code{r0}) can be call-clobbered by subsequent code, including function
++calls and library calls for arithmetic operators on other variables (for
++example the initialization of @code{p2}).  In this case, use temporary
+ variables for expressions between the register assignments:
+ 
+ @smallexample
+@@ -13286,32 +13286,32 @@ asm ("sysint" : "=r" (result) : "0" (p1), "r" (p2));
+ @end smallexample
+ 
+ Defining a register variable does not reserve the register.  Other than
+-when invoking the Extended @code{asm}, the contents of the specified 
+-register are not guaranteed.  For this reason, the following uses 
+-are explicitly @emph{not} supported.  If they appear to work, it is only 
+-happenstance, and may stop working as intended due to (seemingly) 
+-unrelated changes in surrounding code, or even minor changes in the 
++when invoking the Extended @code{asm}, the contents of the specified
++register are not guaranteed.  For this reason, the following uses
++are explicitly @emph{not} supported.  If they appear to work, it is only
++happenstance, and may stop working as intended due to (seemingly)
++unrelated changes in surrounding code, or even minor changes in the
+ optimization of a future version of gcc:
+ 
+ @itemize @bullet
+ @item Passing parameters to or from Basic @code{asm}
+-@item Passing parameters to or from Extended @code{asm} without using input 
++@item Passing parameters to or from Extended @code{asm} without using input
+ or output operands.
+ @item Passing parameters to or from routines written in assembler (or
+ other languages) using non-standard calling conventions.
+ @end itemize
+ 
+-Some developers use Local Register Variables in an attempt to improve 
+-gcc's allocation of registers, especially in large functions.  In this 
++Some developers use Local Register Variables in an attempt to improve
++gcc's allocation of registers, especially in large functions.  In this
+ case the register name is essentially a hint to the register allocator.
+ While in some instances this can generate better code, improvements are
+ subject to the whims of the allocator/optimizers.  Since there are no
+ guarantees that your improvements won't be lost, this usage of Local
+ Register Variables is discouraged.
+ 
+-On the MIPS platform, there is related use for local register variables 
+-with slightly different characteristics (@pxref{MIPS Coprocessors,, 
+-Defining coprocessor specifics for MIPS targets, gccint, 
++On the MIPS platform, there is related use for local register variables
++with slightly different characteristics (@pxref{MIPS Coprocessors,,
++Defining coprocessor specifics for MIPS targets, gccint,
+ GNU Compiler Collection (GCC) Internals}).
+ 
+ @node Hard Register Constraints
+@@ -16848,7 +16848,7 @@ In contrast to scalar operations in C and C++, operands of integer vector
+ operations do not undergo integer promotions.
+ 
+ Operands of binary vector operations must have the same number of
+-elements. 
++elements.
+ 
+ For convenience, it is allowed to use a binary vector operation
+ where one operand is a scalar. In that case the compiler transforms
+@@ -17099,7 +17099,7 @@ pointer type that is 1, 2, 4, or 8 bytes in length.  16-byte integral
+ types are also allowed if @samp{__int128} (@pxref{__int128}) is
+ supported by the architecture.
+ 
+-The four non-arithmetic functions (load, store, exchange, and 
++The four non-arithmetic functions (load, store, exchange, and
+ compare_exchange) all have a generic version as well.  This generic
+ version works on any data type.  It uses the lock-free built-in function
+ if the specific data type size makes that possible; otherwise, an
+@@ -17231,8 +17231,8 @@ contents of @code{*@var{ptr}} in @code{*@var{ret}}.
+ @enddefbuiltin
+ 
+ @defbuiltin{void __atomic_store_n (@var{type} *@var{ptr}, @var{type} @var{val}, int @var{memorder})}
+-This built-in function implements an atomic store operation.  It writes 
+-@code{@var{val}} into @code{*@var{ptr}}.  
++This built-in function implements an atomic store operation.  It writes
++@code{@var{val}} into @code{*@var{ptr}}.
+ 
+ The valid memory order variants are
+ @code{__ATOMIC_RELAXED}, @code{__ATOMIC_SEQ_CST}, and @code{__ATOMIC_RELEASE}.
+@@ -17342,7 +17342,7 @@ This built-in function performs an atomic test-and-set operation on
+ the byte at @code{*@var{ptr}}.  The byte is set to some implementation
+ defined nonzero ``set'' value and the return value is @code{true} if and only
+ if the previous contents were ``set''.
+-It should be only used for operands of type @code{bool} or @code{char}. For 
++It should be only used for operands of type @code{bool} or @code{char}. For
+ other types only part of the value may be set.
+ 
+ All memory orders are valid.
+@@ -17353,7 +17353,7 @@ All memory orders are valid.
+ 
+ This built-in function performs an atomic clear operation on
+ @code{*@var{ptr}}.  After the operation, @code{*@var{ptr}} contains 0.
+-It should be only used for operands of type @code{bool} or @code{char} and 
++It should be only used for operands of type @code{bool} or @code{char} and
+ in conjunction with @code{__atomic_test_and_set}.
+ For other types it may only clear partially. If the type is not @code{bool}
+ prefer using @code{__atomic_store}.
+@@ -17390,7 +17390,7 @@ generate lock-free atomic instructions for the target architecture.
+ resolves to a compile-time constant.
+ 
+ @var{ptr} is an optional pointer to the object that may be used to determine
+-alignment.  A value of 0 indicates typical alignment should be used.  The 
++alignment.  A value of 0 indicates typical alignment should be used.  The
+ compiler may also ignore this parameter.
+ 
+ @smallexample
+@@ -17407,7 +17407,7 @@ the built-in function is not known to be lock-free, a call is made to a
+ runtime routine named @code{__atomic_is_lock_free}.
+ 
+ @var{ptr} is an optional pointer to the object that may be used to determine
+-alignment.  A value of 0 indicates typical alignment should be used.  The 
++alignment.  A value of 0 indicates typical alignment should be used.  The
+ compiler may also ignore this parameter.
+ @enddefbuiltin
+ 
+@@ -18545,6 +18545,96 @@ Returns the openacc gang, worker or vector size depending on whether @var{x} is
+ 0, 1 or 2.
+ @enddefbuiltin
+ 
++@defbuiltin{template <typename Ty, typename Ch>
++consteval
++Ty const* __builtin_std_embed (unsigned int @var{locus}, int & @var{status},
++  size_t & @var{out_size}, Ty const* @var{indicator_ptr}
++  size_t @var{resource_name_size}, Ch const* @var{resource_name},
++  size_t @var{offset}, size_t @var{limit})
++}
++Returns a pointer to backing storage suitably-sized to access @var{out_size}
++elements of a contiguous sequence of @var{const T} objects. The signature
++above is not exact and the builtin does not behave exactly as a function
++template of this declaration type.
++
++The @var{locus} argument is always @code{1} and is significant for implementers
++only. If you are asking the question "am I an implementer?", you are not an
++implementer and you should be passing in a value equivalent to @code{1}.
++If you can answer this in the affirmative, @var{locus} can be broken down as
++@code{do-local-search = (locus & 0x1)} and
++@code{call-stack-distance = (locus >> 1)}. @code{do-local-search} is whether
++a local, location-based search should be performed at all.
++@code{call-stack-distance} is the distance that this builtin call is removed
++from where a normal user would be interfacing with this builtin for file-based
++local search. For example, from within the depths of a @code{std::embed} call,
++@code{locus} would likely be @code{0b101} or @code{0b111}.
++
++The @var{limit} argument is optional.
++
++The @var{status} integer is one of 0, 1, 2, or 3 when the builtin returns.
++The @var{out_size} value is either untouched or written into with the size of
++the found and @var{#depend}ed on resource, and the return value is either
++@code{nullptr} or a pointer to the binary data of the resource. @var{out_size}
++is only filled with a value if the resource name denoted by the sized range
++@var{resource_name} and @var{resource_name_size} can be found and is
++appropriately @code{depend}ed on. @var{indicator_ptr} is simply used for type
++deduction purposes and has no effect.
++
++@code{status} is one of:
++
++@itemize @minus{}
++@item
++@code{0} --- The file could not be found.
++
++@item
++@code{1} --- The file was found, @code{#depend}ed on, and not empty.
++
++@item
++@code{2} --- The file was found but was not properly @code{#depend}ed on.
++
++@item
++@code{3} --- The file was found and @code{#depend}ed on, but it was empty.
++@end itemize
++
++If the function returns, @var{status} will be one of the above returns. The
++compiler will emit an error if some other case such as improper arguments is
++violated.
++
++The resource is consdiered empty if the combination of @var{offset} and
++@var{limit} causes the effective size of the resource to be 0. In all
++cases where @var{status} is not @code{3}, a null pointer of type
++@code{T const*} is returned and @var{out_size} is untouched. @var{offset}
++is applied from the start of the found resource, before @var{limit} is
++applied.
++
++Otherwise, if @var{status} is @code{3}, @var{out_size} is the number of @var{T}
++elements in the returned non-null pointer.
++
++@code{T} must be an integral or enumeration type where
++@code{sizeof(T) == 1 && alignof(T) == 1} is @code{true}.
++
++@code{Ch} must be one of @code{char}, @code{wchar_t}, or @code{char8_t}.
++
++@emph{Note:} Strings that are 8-bits wide are treated as byte strings and
++typically sent directly to underlying file systems. @code{wchar_t} of size
++16-bits is typically treated as UTF-16, and @code{wchar_t} of size 32-bits
++is typically treated as UTF-32, unless otherwise dictated by command line
++options such as @code{-fwide-exec-charset=...}. If a conversion has to be done
++and it fails, an error occurs. Users may try different strings inputs and
++various options to try to pass through paths as faithfully as possible.
++@code{-fexec-charset=...} does not affect this because all 8-bit strings are
++treated the same. When ported to Windows systems, this may not be the case as
++the native file system interface utilizes UTF-16.
++
++For the best portability and results, utilize paths that are clean UTF-8.
++
++@emph{Important:} The returned pointer is not unique to the invocation of the
++builtin and it is not guaranteed to return a unique pointer to unique data.
++Its address is @emph{non-unique}.
++
++A future extension can possibly allow for additional types, possibly
++all types which are considered "trivial" types.
++@enddefbuiltin
+ 
+ @node Target Builtins
+ @section Built-in Functions Specific to Particular Target Machines
+@@ -25618,7 +25708,7 @@ The @code{scalar_cmp_exp_gt}, @code{scalar_cmp_exp_lt},
+ functions return a non-zero value if @code{arg1} is greater than, less
+ than, equal to, or not comparable to @code{arg2} respectively.  The
+ arguments are not comparable if one or the other equals NaN (not a
+-number). 
++number).
+ 
+ The @code{scalar_test_data_class} built-in function returns 1
+ if any of the condition tests enabled by the value of the
+@@ -30372,7 +30462,7 @@ v2si __builtin_ia32_pswapdsi (v2si);
+ 
+ The following built-in functions are available when @option{-mrtm} is used
+ They are used for restricted transactional memory. These are the internal
+-low level functions. Normally the functions in 
++low level functions. Normally the functions in
+ @ref{x86 transactional memory intrinsics} should be used instead.
+ 
+ @smallexample
+@@ -30431,7 +30521,7 @@ void __builtin_ia32_clrssbsy(void *);
+ These hardware transactional memory intrinsics for x86 allow you to use
+ memory transactions with RTM (Restricted Transactional Memory).
+ This support is enabled with the @option{-mrtm} option.
+-For using HLE (Hardware Lock Elision) see 
++For using HLE (Hardware Lock Elision) see
+ @ref{x86 specific memory model extensions for transactional memory} instead.
+ 
+ A memory transaction commits all changes to memory in an atomic way,
+@@ -30442,10 +30532,10 @@ Generally there is no guarantee that a memory transaction ever succeeds
+ and suitable fallback code always needs to be supplied.
+ 
+ @deftypefn {RTM Function} {unsigned} _xbegin ()
+-Start a RTM (Restricted Transactional Memory) transaction. 
++Start a RTM (Restricted Transactional Memory) transaction.
+ Returns @code{_XBEGIN_STARTED} when the transaction
+-started successfully (note this is not 0, so the constant has to be 
+-explicitly tested).  
++started successfully (note this is not 0, so the constant has to be
++explicitly tested).
+ 
+ If the transaction aborts, all side effects
+ are undone and an abort code encoded as a bit mask is returned.
+@@ -30493,7 +30583,7 @@ Return a nonzero value if a transaction is currently active, otherwise 0.
+ 
+ @deftypefn {RTM Function} {void} _xabort (status)
+ Abort the current transaction. When no transaction is active this is a no-op.
+-The @var{status} is an 8-bit constant; its value is encoded in the return 
++The @var{status} is an 8-bit constant; its value is encoded in the return
+ value from @code{_xbegin}.
+ @end deftypefn
+ 
+@@ -30507,18 +30597,18 @@ int n_tries, max_tries;
+ unsigned status = _XABORT_EXPLICIT;
+ ...
+ 
+-for (n_tries = 0; n_tries < max_tries; n_tries++) 
++for (n_tries = 0; n_tries < max_tries; n_tries++)
+   @{
+     status = _xbegin ();
+     if (status == _XBEGIN_STARTED || !(status & _XABORT_RETRY))
+       break;
+   @}
+-if (status == _XBEGIN_STARTED) 
++if (status == _XBEGIN_STARTED)
+   @{
+     ... transaction code...
+     _xend ();
+-  @} 
+-else 
++  @}
++else
+   @{
+     ... non-transactional fallback path...
+   @}
+@@ -30534,7 +30624,7 @@ must synchronize together to ensure consistency.
+ @deftypefn {CET Function} {ret_type} _get_ssp (void)
+ Get the current value of shadow stack pointer if shadow stack support
+ from Intel CET is enabled in the hardware or @code{0} otherwise.
+-The @code{ret_type} is @code{unsigned long long} for 64-bit targets 
++The @code{ret_type} is @code{unsigned long long} for 64-bit targets
+ and @code{unsigned int} for 32-bit targets.
+ @end deftypefn
+ 
+@@ -31412,7 +31502,7 @@ Function Multiversioning} for more details.
+ @section Type Traits
+ 
+ The C++ front end implements syntactic extensions that allow
+-compile-time determination of 
++compile-time determination of
+ various characteristics of a type (or of a
+ pair of types).
+ 
+diff --git a/gcc/incpath.cc b/gcc/incpath.cc
+index 74ae8ba1918..617861b923c 100644
+--- a/gcc/incpath.cc
++++ b/gcc/incpath.cc
+@@ -26,6 +26,7 @@
+ #include "intl.h"
+ #include "incpath.h"
+ #include "cppdefault.h"
++#include "xregex.h"
+ 
+ /* Microsoft Windows does not natively support inodes.
+    VMS has non-numeric inodes.  */
+@@ -62,6 +63,9 @@ static struct cpp_dir *remove_duplicates (cpp_reader *, struct cpp_dir *,
+ /* Include chains heads and tails.  */
+ static struct cpp_dir *heads[INC_MAX];
+ static struct cpp_dir *tails[INC_MAX];
++/* #depend inputs and patterns */
++static struct cpp_dep_pattern *deps_head;
++static struct cpp_dep_pattern *deps_tail;
+ 
+ static bool quote_ignores_source_dir;
+ enum { REASON_QUIET = 0, REASON_NOENT, REASON_DUP, REASON_DUP_SYS };
+@@ -529,6 +533,174 @@ get_added_cpp_dirs (incpath_kind chain)
+   return heads[chain];
+ }
+ 
++void
++add_cpp_dep_pattern (cpp_dep_pattern *dep)
++{
++  if (deps_tail)
++    deps_tail->next = dep;
++  else
++    deps_head = dep;
++  dep->next = NULL;
++  deps_tail = dep;
++}
++
++cpp_dep_pattern *
++get_cpp_dep_patterns (void)
++{
++  return deps_head;
++}
++
++bool
++cpp_dep_pattern_check_one (const char *real_path, unsigned int real_path_len,
++		       cpp_dep_pattern *dep)
++{
++  if (real_path == NULL || real_path_len == 0 || dep == NULL)
++    return false;
++  if (re_match (dep->pattern_regex, real_path, real_path_len, 0, NULL))
++    {
++      return true;
++    }
++  return false;
++}
++
++bool
++cpp_dep_pattern_check_from (const char *real_path,
++				 unsigned int real_path_len,
++				 cpp_dep_pattern *dep)
++{
++  cpp_dep_pattern *p = dep;
++  for (; p != NULL; p = p->next)
++    {
++      if (cpp_dep_pattern_check_one (real_path, real_path_len, p))
++	return true;
++    }
++  return false;
++}
++
++bool
++cpp_dep_pattern_check (const char *real_path, unsigned int real_path_len)
++{
++  return cpp_dep_pattern_check_from (real_path, real_path_len, deps_head);
++}
++
++/* Append the file name to the directory to create the path, but don't
++   turn / into // or // into ///; // may be a namespace escape.  */
++static char *
++append_file_to_dir (const char *fname, cpp_dir *dir)
++{
++  size_t dlen, flen;
++  char *path;
++
++  dlen = dir->len;
++  flen = strlen (fname);
++  path = XNEWVEC (char, dlen + 1 + flen + 1);
++  memcpy (path, dir->name, dlen);
++  if (dlen && !IS_DIR_SEPARATOR (path[dlen - 1]))
++    path[dlen++] = '/';
++  memcpy (&path[dlen], fname, flen + 1);
++
++  return path;
++}
++
++/* Append the file name to the directory to create the path, but don't
++   turn / into // or // into ///; // may be a namespace escape.  */
++char *
++append_file_to_dir_name (const char *fname, const char *fdir)
++{
++  size_t dlen, flen;
++  char *path;
++
++  dlen = strlen (fdir);
++  flen = strlen (fname);
++  path = XNEWVEC (char, dlen + 1 + flen + 1);
++  memcpy (path, fdir, dlen);
++  if (dlen && !IS_DIR_SEPARATOR (path[dlen - 1]))
++    path[dlen++] = '/';
++  memcpy (&path[dlen], fname, flen + 1);
++
++  return path;
++}
++
++bool
++search_path_kind (const char *path, unsigned int path_len, incpath_kind kind,
++		  const char *maybe_lookup_dir, const char **result_name,
++		  cpp_dir **found_dir)
++{
++  return search_path_with_dir (path, path_len, heads[kind],
++			       maybe_lookup_dir, result_name, found_dir);
++}
++
++bool
++search_path_with_dir (const char *path, unsigned int path_len,
++		      cpp_dir *dir_list, const char *maybe_lookup_dir,
++		      const char **result_name, cpp_dir **found_dir)
++{
++  if (path_len == 0 || (maybe_lookup_dir == NULL && dir_list == NULL))
++    {
++      /* nothing to do */
++      if (found_dir)
++	*found_dir = NULL;
++      return false;
++    }
++  if (IS_ANY_ABSOLUTE_PATH_N(path, path_len))
++    {
++      /* there is nothing to put in found_dir, since it was absolute */
++      struct stat buf;
++      if (stat(path, &buf) == 0)
++	{
++	  if (found_dir)
++	    *found_dir = NULL;
++	  return true;
++	}
++      return false;
++    }
++
++  char *current_path = NULL;
++  bool result = false;
++  if (maybe_lookup_dir)
++    {
++      /* just try to see if it exists on the local path first  */
++      current_path = append_file_to_dir_name (path, maybe_lookup_dir);
++      struct stat buf;
++      if (stat (current_path, &buf) == 0)
++	{
++	  if (found_dir)
++	    *found_dir = NULL;
++	  result = true;
++	  goto done;
++	}
++      free ((void*)current_path);
++      current_path = NULL;
++    }
++
++  for (cpp_dir* dir = dir_list; dir; dir = dir->next)
++    {
++      if (dir->construct)
++	current_path = dir->construct (path, dir);
++      else
++	current_path = append_file_to_dir (path, dir);
++      struct stat buf;
++      if (stat (current_path, &buf) == 0)
++	{
++	  if (found_dir)
++	    *found_dir = dir;
++	  result = true;
++	  goto done;
++	}
++      free ((void*)current_path);
++      current_path = NULL;
++    }
++done:
++  if (result_name == NULL || !result)
++    {
++      free ((void*)current_path);
++    }
++
++  if (result_name != NULL)
++    *result_name = result ? current_path : NULL;
++  return result;
++}
++
+ #if !(defined TARGET_EXTRA_INCLUDES) || !(defined TARGET_EXTRA_PRE_INCLUDES)
+ static void hook_void_charptr_charptr_int (const char *sysroot ATTRIBUTE_UNUSED,
+ 					   const char *iprefix ATTRIBUTE_UNUSED,
+diff --git a/gcc/incpath.h b/gcc/incpath.h
+index 974022e5b2a..9edb17cf465 100644
+--- a/gcc/incpath.h
++++ b/gcc/incpath.h
+@@ -25,9 +25,12 @@ enum incpath_kind {
+   INC_SYSTEM,    /* sys-include */
+   INC_AFTER,	 /* post-sysinclude  */
+   INC_EMBED,     /* embed <foo> */
++  INC_DEPEND,    /* depend <foo**> */
+   INC_MAX
+ };
+ 
++typedef struct cpp_dep_pattern cpp_dep_pattern;
++
+ extern void split_quote_chain (void);
+ extern void add_path (char *, incpath_kind, int, bool);
+ extern void register_include_chains (cpp_reader *, const char *,
+@@ -36,6 +39,26 @@ extern void register_include_chains (cpp_reader *, const char *,
+ extern void add_cpp_dir_path (struct cpp_dir *, incpath_kind);
+ extern struct cpp_dir *get_added_cpp_dirs (incpath_kind);
+ 
++extern void add_cpp_dep_pattern (cpp_dep_pattern *);
++extern struct cpp_dep_pattern *get_cpp_dep_patterns (void);
++extern bool cpp_dep_pattern_check_one (const char*, unsigned int,
++				       cpp_dep_pattern *);
++extern bool cpp_dep_pattern_check_from (const char*, unsigned int,
++					cpp_dep_pattern *);
++extern bool cpp_dep_pattern_check (const char*, unsigned int);
++
++extern char * append_file_to_dir_name (const char *fname, const char *fdir);
++
++extern bool search_path_kind (const char *path, unsigned int path_len,
++			      incpath_kind kind, const char *maybe_lookup_dir,
++			      const char **result_path, cpp_dir **found_dir);
++
++extern bool search_path_with_dir (const char *path, unsigned int path_len,
++				  cpp_dir *dir_list,
++				  const char *maybe_lookup_dir,
++				  const char **result_path,
++				  cpp_dir **found_dir);
++
+ struct target_c_incpath_s {
+   /* Do extra includes processing.  STDINC is false iff -nostdinc was given.  */
+   void (*extra_pre_includes) (const char *, const char *, int);
+diff --git a/gcc/tree-core.h b/gcc/tree-core.h
+index 07e9318f5e8..86c2e55576d 100644
+--- a/gcc/tree-core.h
++++ b/gcc/tree-core.h
+@@ -2510,4 +2510,19 @@ extern GTY(()) const char * current_function_func_begin_label;
+ /* Information about the _FloatN and _FloatNx types.  */
+ extern const floatn_type_info floatn_nx_types[NUM_FLOATN_NX_TYPES];
+ 
++typedef struct global_constant_evaluation_link
++  {
++    global_constant_evaluation_link *next;
++    global_constant_evaluation_link *prev;
++    tree value;
++  }
++global_constant_evaluation_link;
++/* Points to the chain of global constant evaluations, if available. */
++extern void push_constant_eval_list(global_constant_evaluation_link *next);
++extern void pop_constant_eval_list(global_constant_evaluation_link *verify);
++extern const global_constant_evaluation_link *get_constant_eval_list_begin();
++extern const global_constant_evaluation_link *get_constant_eval_list_end();
++const global_constant_evaluation_link * get_constant_eval_list_at(int at);
++const global_constant_evaluation_link * get_constant_eval_list_rev_at(int at);
++
+ #endif  // GCC_TREE_CORE_H
+diff --git a/gcc/tree.cc b/gcc/tree.cc
+index 2868cb0867d..b69c7b182c3 100644
+--- a/gcc/tree.cc
++++ b/gcc/tree.cc
+@@ -794,7 +794,7 @@ init_ttree (void)
+   lang_hooks.init_ts ();
+ }
+ 
+-
++
+ /* Mapping from prefix to label number.  */
+ 
+ struct identifier_hash : ggc_ptr_hash <tree_node>
+@@ -1460,7 +1460,7 @@ free_node (tree node)
+     cl_target_option_free (TREE_TARGET_OPTION (node));
+   ggc_free (node);
+ }
+-
++
+ /* Return a new node with the same contents as NODE except that its
+    TREE_CHAIN, if it has one, is zero and it has a fresh uid.  */
+ 
+@@ -1573,7 +1573,7 @@ copy_list (tree list)
+   return head;
+ }
+ 
+-
++
+ /* Return the value that TREE_INT_CST_EXT_NUNITS should have for an
+    INTEGER_CST with value CST and type TYPE.   */
+ 
+@@ -2981,7 +2981,7 @@ grow_tree_vec (tree v, int len MEM_STAT_DECL)
+ 
+   return v;
+ }
+-
++
+ /* Return true if EXPR is the constant zero, whether it is integral, float or
+    fixed, and scalar, complex or vector.  */
+ 
+@@ -3469,7 +3469,7 @@ tree_to_poly_uint64 (const_tree t)
+     return poly_int_cst_value (t).force_uhwi ();
+   return TREE_INT_CST_LOW (t);
+ }
+-
++
+ /* Return first list element whose TREE_VALUE is ELEM.
+    Return 0 if ELEM is not in LIST.  */
+ 
+@@ -3656,7 +3656,7 @@ nreverse (tree t)
+     }
+   return prev;
+ }
+-
++
+ /* Return a newly created TREE_LIST node whose
+    purpose and value fields are PARM and VALUE.  */
+ 
+@@ -3723,7 +3723,7 @@ ctor_to_vec (tree ctor)
+ 
+   return vec;
+ }
+-
++
+ /* Return the size nominally occupied by an object of type TYPE
+    when it resides in memory.  The value is measured in units of bytes,
+    and its data type is that normally used for type sizes
+@@ -3802,7 +3802,7 @@ max_int_size_in_bytes (const_tree type)
+ 
+   return size;
+ }
+-
++
+ /* Return the bit position of FIELD, in bits from the start of the record.
+    This is a tree of type bitsizetype.  */
+ 
+@@ -3812,7 +3812,7 @@ bit_position (const_tree field)
+   return bit_from_pos (DECL_FIELD_OFFSET (field),
+ 		       DECL_FIELD_BIT_OFFSET (field));
+ }
+-
++
+ /* Return the byte position of FIELD, in bytes from the start of the record.
+    This is a tree of type sizetype.  */
+ 
+@@ -3832,7 +3832,7 @@ int_byte_position (const_tree field)
+ {
+   return tree_to_shwi (byte_position (field));
+ }
+-
++
+ /* Return, as a tree node, the number of elements for TYPE (which is an
+    ARRAY_TYPE) minus one.  This counts only elements of the top array.  */
+ 
+@@ -3881,7 +3881,7 @@ array_type_nelts_top (tree type)
+ 		      array_type_nelts_minus_one (type),
+ 		      size_one_node);
+ }
+-
++
+ /* If arg is static -- a reference to an object in static storage -- then
+    return the object.  This is not the same as the C meaning of `static'.
+    If arg isn't static, return NULL.  */
+@@ -3952,7 +3952,7 @@ staticp (tree arg)
+     }
+ }
+ 
+-
++
+ 
+ 
+ /* Return whether OP is a DECL whose address is function-invariant.  */
+@@ -4280,7 +4280,7 @@ process_call_operands (tree t)
+   TREE_SIDE_EFFECTS (t) = side_effects;
+   TREE_READONLY (t) = read_only;
+ }
+-
++
+ /* Return true if EXP contains a PLACEHOLDER_EXPR, i.e. if it represents a
+    size or offset that depends on a field within a record.  */
+ 
+@@ -4462,7 +4462,7 @@ type_contains_placeholder_p (tree type)
+ 
+   return result;
+ }
+-
++
+ /* Push tree EXP onto vector QUEUE if it is not already present.  */
+ 
+ static void
+@@ -4919,7 +4919,7 @@ substitute_placeholder_in_expr (tree exp, tree obj)
+ 
+   return new_tree;
+ }
+-
++
+ 
+ /* Subroutine of stabilize_reference; this is called for subtrees of
+    references.  Any expression with side-effects must be put in a SAVE_EXPR
+@@ -5090,7 +5090,7 @@ stabilize_reference (tree ref)
+ 
+   return result;
+ }
+-
++
+ /* Low-level constructors for expressions.  */
+ 
+ /* A helper function for build1 and constant folders.  Set TREE_CONSTANT,
+@@ -5553,7 +5553,7 @@ build_nt_call_vec (tree fn, vec<tree, va_gc> *args)
+     CALL_EXPR_ARG (ret, ix) = t;
+   return ret;
+ }
+-
++
+ /* Create a DECL_... node of code CODE, name NAME  (if non-null)
+    and data type TYPE.
+    We do NOT enter this node in any sort of symbol table.
+@@ -5629,7 +5629,7 @@ build_translation_unit_decl (tree name)
+   return tu;
+ }
+ 
+-
++
+ /* BLOCK nodes are used to represent the structure of binding contours
+    and declarations, once those contours have been exited and their contents
+    compiled.  This information is used for outputting debugging info.  */
+@@ -5646,7 +5646,7 @@ build_block (tree vars, tree subblocks, tree supercontext, tree chain)
+   return block;
+ }
+ 
+-
++
+ /* Like SET_EXPR_LOCATION, but make sure the tree can have a location.
+ 
+    LOC is the location to use in tree T.  */
+@@ -5674,7 +5674,7 @@ protected_set_expr_location_if_unset (tree t, location_t loc)
+   if (t && !EXPR_HAS_LOCATION (t))
+     protected_set_expr_location (t, loc);
+ }
+-
++
+ /* Set the type qualifiers for TYPE to TYPE_QUALS, which is a bitmask
+    of the various TYPE_QUAL values.  */
+ 
+@@ -5962,7 +5962,7 @@ build_variant_type_copy (tree type MEM_STAT_DECL)
+ 
+   return t;
+ }
+-
++
+ /* Return true if the from tree in both tree maps are equal.  */
+ 
+ int
+@@ -8203,7 +8203,7 @@ excess_precision_type (tree type)
+ 
+   return NULL_TREE;
+ }
+-
++
+ /* Return OP, stripped of any conversions to wider types as much as is safe.
+    Converting the value back to OP's type makes a value equivalent to OP.
+ 
+@@ -8300,7 +8300,7 @@ get_unwidened (tree op, tree for_type)
+ 
+   return win;
+ }
+-
++
+ /* Return OP or a simpler expression for a narrower value
+    which can be sign-extended or zero-extended to give back OP.
+    Store in *UNSIGNEDP_PTR either 1 if the value should be zero-extended
+@@ -8413,7 +8413,7 @@ get_narrower (tree op, int *unsignedp_ptr)
+   *unsignedp_ptr = uns;
+   return win;
+ }
+-
++
+ /* Return true if integer constant C has a value that is permissible
+    for TYPE, an integral type.  */
+ 
+@@ -9008,7 +9008,7 @@ dump_tree_statistics (void)
+   print_value_expr_statistics ();
+   lang_hooks.print_statistics ();
+ }
+-
++
+ #define FILE_FUNCTION_FORMAT "_GLOBAL__%s_%s"
+ 
+ /* Generate a crc32 of the low BYTES bytes of VALUE.  */
+@@ -9174,7 +9174,7 @@ get_file_function_name (const char *type)
+ 
+   return get_identifier (buf);
+ }
+-
++
+ #if defined ENABLE_TREE_CHECKING && (GCC_VERSION >= 2007)
+ 
+ /* Complain that the tree code of NODE does not match the expected 0
+@@ -9449,7 +9449,7 @@ omp_clause_operand_check_failed (int idx, const_tree t, const char *file,
+      trim_filename (file), line);
+ }
+ #endif /* ENABLE_TREE_CHECKING */
+-
++
+ /* Create a new vector type node holding NUNITS units of type INNERTYPE,
+    and mapped to the machine mode MODE.  Initialize its fields and build
+    the information necessary for debugging output.  */
+@@ -15898,6 +15898,101 @@ gt_pch_nx (tree_raw_data *x, gt_pointer_operator op, void *cookie)
+   x->str = (const char *) (x->owner) + off;
+ }
+ 
++static global_constant_evaluation_link* gce_head = NULL;
++static global_constant_evaluation_link* gce_tail = NULL;
++
++void push_constant_eval_list(global_constant_evaluation_link *next)
++{
++  if (gce_head == NULL)
++    {
++      next->next = NULL;
++      next->prev = NULL;
++      gce_head = next;
++      gce_tail = next;
++      return;
++    }
++
++  if (next->value == gce_tail->value)
++    return;
++
++  next->prev = gce_tail;
++  gce_tail->next = next;
++  gce_tail = next;
++}
++
++void pop_constant_eval_list(global_constant_evaluation_link *verify)
++{
++  gcc_checking_assert (verify != NULL && gce_tail != NULL
++			? verify == gce_tail
++			: true);
++  if (gce_head == NULL)
++    return;
++  if (gce_head == gce_tail)
++    {
++      gce_head = NULL;
++      gce_tail = NULL;
++      return;
++    }
++  global_constant_evaluation_link *new_tail = gce_tail->prev;
++  new_tail->next = NULL;
++  gce_tail = new_tail;
++}
++
++const global_constant_evaluation_link *
++get_constant_eval_list_begin()
++{
++  return gce_head;
++}
++
++const global_constant_evaluation_link *
++get_constant_eval_list_end()
++{
++  return gce_tail;
++}
++
++const global_constant_evaluation_link *
++get_constant_eval_list_rev_at(int at)
++{
++  if (gce_head == NULL)
++    return NULL;
++
++  if (at < 0)
++    {
++      global_constant_evaluation_link *target = gce_head;
++      at = -at;
++      while (target->next != NULL && at-- > 0)
++	target = target->next;
++      return target;
++    }
++
++  global_constant_evaluation_link *target = gce_tail;
++  while (target->prev != NULL && at-- > 0)
++    target = target->prev;
++  return target;
++}
++
++const global_constant_evaluation_link *
++get_constant_eval_list_at(int at)
++{
++  if (gce_head == NULL)
++    return NULL;
++
++  if (at < 0)
++    {
++      global_constant_evaluation_link *target = gce_tail;
++      at = -at;
++      while (target->prev != NULL && at-- > 0)
++	target = target->prev;
++      return target;
++    }
++
++  global_constant_evaluation_link *target = gce_head;
++  while (target->next != NULL && at-- > 0)
++    target = target->next;
++  return target;
++}
++
++
+ #if CHECKING_P
+ 
+ namespace selftest {
+diff --git a/gcc/tree.h b/gcc/tree.h
+index f8b2d718b7e..41a29d2dfd5 100644
+--- a/gcc/tree.h
++++ b/gcc/tree.h
+@@ -5171,6 +5171,18 @@ strip_pointer_types (const_tree type)
+   return type;
+ }
+ 
++/* Recursively traverse down pointer type layers to
++   pointee type, up to a limit.  */
++
++inline const_tree
++strip_pointer_types_by (const_tree type, unsigned int max_strips = 1)
++{
++  while (POINTER_TYPE_P (type) && max_strips-- > 0)
++    type = TREE_TYPE (type);
++
++  return type;
++}
++
+ /* Desription of the reason why the argument of valid_constant_size_p
+    is not a valid size.  */
+ enum cst_size_error {
+diff --git a/include/ChangeLog b/include/ChangeLog
+index 99f84263f47..108a6ac5a56 100644
+--- a/include/ChangeLog
++++ b/include/ChangeLog
+@@ -1,3 +1,8 @@
++2026-04-23  Bjorkus "ThePhD" Dorkus  <phdofthehouse@gmail.com>
++
++	* filenames.h (IS_ANY_ABSOLUTE_PATH_N): new helper to check
++	dos and non-dos pathnames at once with safe size checking.
++
+ 2026-02-05  Matthieu Longo  <matthieu.longo@arm.com>
+ 
+ 	* doubly-linked-list.h
+@@ -1659,7 +1664,7 @@
+ 	* libiberty.h (stack_limit_increase): New prototype.
+ 
+ 2011-07-13  Sriraman Tallam  <tmsriram@google.com>
+-	
++
+ 	* plugin-api.h
+ 	(ld_plugin_section): New struct.
+ 	(ld_plugin_get_section_count): New typedef.
+@@ -1759,7 +1764,7 @@
+ 
+ 	* simple-object.h: New file.
+ 
+-2010-10-15  Dave Korn  <dave.korn.cygwin@gmail.com> 
++2010-10-15  Dave Korn  <dave.korn.cygwin@gmail.com>
+ 
+ 	Sync LD plugin patch series (part 1/6) with src/include/.
+ 	* plugin-api.h (LDPT_GNU_LD_VERSION): New ld_plugin_tag enum member.
+@@ -2033,11 +2038,11 @@
+ 
+ 2008-12-10  Jason Merrill  <jason@redhat.com>
+ 
+-	* demangle.h (enum demangle_component_type): Add 
++	* demangle.h (enum demangle_component_type): Add
+ 	DEMANGLE_COMPONENT_FIXED_TYPE.
+ 
+ 2008-11-19  Bob Wilson  <bob.wilson@acm.org>
+-	
++
+ 	* xtensa-config.h (XCHAL_HAVE_MUL16, XCHAL_HAVE_MUL32, XCHAL_HAVE_DIV32)
+ 	(XCHAL_HAVE_MINMAX, XCHAL_HAVE_SEXT, XCHAL_HAVE_THREADPTR)
+ 	(XCHAL_HAVE_RELEASE_SYNC, XCHAL_HAVE_S32C1I): Change to 1.
+@@ -2047,7 +2052,7 @@
+ 	(XCHAL_ICACHE_LINEWIDTH, XCHAL_DCACHE_LINEWIDTH): Change to 5.
+ 	(XCHAL_DCACHE_IS_WRITEBACK): Change to 1.
+ 	(XCHAL_DEBUGLEVEL): Change to 6.
+-	
++
+ 2008-10-21  Alan Modra  <amodra@bigpond.net.au>
+ 
+ 	* obstack.h (obstack_finish <!__GNUC__>): Cast result to void *.
+@@ -2112,19 +2117,19 @@
+ 	* libiberty.h (pex_free): Document process killing.
+ 
+ 2007-08-31  Douglas Gregor  <doug.gregor@gmail.com>
+-	
++
+ 	* demangle.h (enum demangle_component_type): Add
+-	DEMANGLE_COMPONENT_RVALUE_REFERENCE. 
++	DEMANGLE_COMPONENT_RVALUE_REFERENCE.
+ 
+ 2007-07-25  Ben Elliston  <bje@au.ibm.com>
+ 
+ 	* ternary.h: Remove.
+ 
+ 2007-07-18  Bob Wilson  <bob.wilson@acm.org>
+-	
++
+ 	* xtensa-config.h (XCHAL_HAVE_THREADPTR): New.
+ 	(XCHAL_HAVE_RELEASE_SYNC, XCHAL_HAVE_S32C1I): New.
+-	
++
+ 2007-07-17  Nick Clifton  <nickc@redhat.com>
+ 
+ 	* COPYING3: New file.  Contains version 3 of the GNU General
+@@ -2150,7 +2155,7 @@
+ 	regardless of the type of file system.
+ 
+ 2007-03-06  Jan Hubicka  <jh@suse.cz>
+-	
++
+ 	* ansidecl.h (ATTRIBUTE_COLD, ATTRIBUTE_HOT): New.
+ 
+ 2007-02-09  Joseph S. Myers  <joseph@codesourcery.com>
+@@ -2158,7 +2163,7 @@
+ 	* libiberty.h (pex_write_input): Remove prototype.
+ 
+ 2007-01-31  Vladimir Prus  <vladimir@codesourcery.com>
+-	
++
+ 	* libiberty.h (PEX_STDERR_TO_PIPE): New define.
+ 	(PEX_BINARY_ERROR): New define.
+ 	(pex_read_err): New function.
+@@ -2240,13 +2245,13 @@
+ 	(md5_ctx): Align buffer field.
+ 
+ 2005-06-30  Daniel Berlin  <dberlin@dberlin.org>
+-	
++
+ 	* hashtab.h (HTAB_DELETED_ENTRY): New macro.
+ 	(HTAB_EMPTY_ENTRY): New macro.
+ 
+ 2005-06-20  Geoffrey Keating  <geoffk@apple.com>
+ 
+-	* libiberty.h (strverscmp): Prototype. 
++	* libiberty.h (strverscmp): Prototype.
+ 
+ 2005-06-06  Gabriel Dos Reis  <gdr@integrable-solutions.net>
+ 
+diff --git a/include/filenames.h b/include/filenames.h
+index 74dc8841e60..986847d3ca2 100644
+--- a/include/filenames.h
++++ b/include/filenames.h
+@@ -54,6 +54,10 @@ extern "C" {
+ #  define IS_ABSOLUTE_PATH(f) IS_UNIX_ABSOLUTE_PATH (f)
+ #endif
+ 
++#define IS_ANY_ABSOLUTE_PATH_N(f, n)        \
++  (((n) > 0 && IS_UNIX_ABSOLUTE_PATH (f))   \
++  || ((n) > 1 && IS_DOS_ABSOLUTE_PATH (f)))
++
+ #define IS_DIR_SEPARATOR_1(dos_based, c)				\
+   (((c) == '/')								\
+    || (((c) == '\\') && (dos_based)))
+diff --git a/libcpp/ChangeLog b/libcpp/ChangeLog
+index 0fe3dbd0957..4992a1ac397 100644
+--- a/libcpp/ChangeLog
++++ b/libcpp/ChangeLog
+@@ -1,3 +1,18 @@
++2026-04-23  Bjorkus "ThePhD" Dorkus  <phdofthehouse@gmail.com>
++
++	* include/cpplib.h: whole-cloth implementation of #depend directive.
++	new type cpp_dep_pattern: retains regex pattern and name for
++	--embed-dir=... matching at compile-time. New cpp_depend_cb callback
++	type for passing cpp_dep_patterns to libcpp clients.
++	* init.cc (cpp_destroy): properly destroy dependency patterns when
++	done with preprocessing.
++	* internal.h: New functions _cpp_destroy_dep_patterns and
++	_cpp_add_depend for internal data. New member depend_patterns for
++	cpp_reader structure.
++	* files.cc: core file plumbing to support new depend directive and file
++	path name checking for #depend directive.
++	*
++
+ 2026-04-21  Marek Polacek  <polacek@redhat.com>
+ 
+ 	PR preprocessor/124930
+@@ -3338,7 +3353,7 @@
+ 	* include/cpplib.h (cpp_force_token_locations): Take location, not
+ 	pointer to one.
+ 	* init.c (cpp_create_reader): Adjust.
+-	* lex.c (cpp_read_main_file): 
++	* lex.c (cpp_read_main_file):
+ 
+ 	* directives.c (do_include_common): Commonize cleanup path.
+ 	(_cpp_pop_buffer): Fix leak.
+@@ -3508,7 +3523,7 @@
+ 	(struct cpp_macro): Union parms and next assert chain.
+ 	(union _cpp_hashnode_value): 'answer' field is cpp_macro.
+ 	* directives.c (parse_answer): Convert to use cpp_macro. Return
+-	true on success. 
++	true on success.
+ 	(parse_assertion, find_answer, _cpp_test_assertion, cpp_do_assert)
+ 	(cpp_do_unassert): Convert to use cpp_macro.
+ 	* macro.c (warn_of_redefinition, _cpp_new_macro)
+diff --git a/libcpp/directives.cc b/libcpp/directives.cc
+index 9accc3798e0..7812b17d347 100644
+--- a/libcpp/directives.cc
++++ b/libcpp/directives.cc
+@@ -165,6 +165,7 @@ static void cpp_pop_definition (cpp_reader *, def_pragma_macro *,
+   D(pragma,	T_PRAGMA,	STDC89,    IN_I)			\
+   D(warning,	T_WARNING,	STDC23,    0)				\
+   D(embed,	T_EMBED,	STDC23,    IN_I | INCL | EXPAND)	\
++  D(depend,	T_DEPEND,	EXTENSION,  IN_I | INCL)		\
+   D(include_next, T_INCLUDE_NEXT, EXTENSION, INCL | EXPAND)		\
+   D(ident,	T_IDENT,	EXTENSION, IN_I)			\
+   D(import,	T_IMPORT,	EXTENSION, INCL | EXPAND)  /* ObjC */	\
+@@ -1443,6 +1444,64 @@ do_embed (cpp_reader *pfile)
+   XDELETEVEC (fname);
+ }
+ 
++/* Handle #depend directive.  */
++
++static void
++do_depend (cpp_reader *pfile)
++{
++  int angle_brackets;
++  const char *deppattern = NULL;
++  bool is_exported = false;
++  const cpp_token *maybe_export = NULL;
++  location_t loc;
++
++  /* Tell the lexer this is an depend directive.  */
++  pfile->state.in_directive = 1;
++
++  if (CPP_OPTION (pfile, traditional))
++    {
++      cpp_error (pfile, CPP_DL_ERROR, /* FIXME should be DL_SORRY */
++		 "%<#depend%> not supported in traditional C");
++      skip_rest_of_line (pfile);
++      goto done;
++    }
++
++  maybe_export = cpp_peek_token (pfile, 0);
++  if (maybe_export->type == cpp_ttype::CPP_NAME && ustrcmp (maybe_export->val.str.text, UC"export"))
++    {
++      // eat the 'export' token and mark it as an export dir
++      _cpp_lex_token (pfile);
++      is_exported = true;
++    }
++
++  deppattern = parse_include (pfile, &angle_brackets, NULL, &loc);
++  if (!deppattern)
++    {
++      skip_rest_of_line (pfile);
++      goto done;
++    }
++
++  if (!*deppattern)
++    {
++      cpp_error_with_line (pfile, CPP_DL_ERROR, loc, 0,
++			   "empty pattern in #%s",
++			   pfile->directive->name);
++      skip_rest_of_line (pfile);
++      goto done;
++    }
++
++  pfile->state.angled_headers = false;
++  pfile->state.directive_wants_padding = false;
++
++  /* Get out of macro context, if we are.  */
++  skip_rest_of_line (pfile);
++
++  _cpp_add_depend (pfile, deppattern, is_exported, angle_brackets != 0, loc);
++
++ done:
++  XDELETEVEC (deppattern);
++}
++
+ /* Subroutine of do_linemarker.  Read possible flags after file name.
+    LAST is the last flag seen; 0 if this is the first flag. Return the
+    flag if it is valid, 0 at the end of the directive. Otherwise
+diff --git a/libcpp/files.cc b/libcpp/files.cc
+index 9234ead0d23..0a8257012ba 100644
+--- a/libcpp/files.cc
++++ b/libcpp/files.cc
+@@ -28,6 +28,7 @@ along with this program; see the file COPYING3.  If not see
+ #include "obstack.h"
+ #include "hashtab.h"
+ #include "md5.h"
++#include "xregex.h"
+ #include <dirent.h>
+ 
+ /* Variable length record files on VMS will have a stat size that includes
+@@ -207,6 +208,10 @@ static char *read_filename_string (int ch, FILE *f);
+ static void read_name_map (cpp_dir *dir);
+ static char *remap_filename (cpp_reader *pfile, _cpp_file *file);
+ static char *append_file_to_dir (const char *fname, cpp_dir *dir);
++static char *append_absolute_file_to_dir (const char *fname, cpp_dir *dir);
++static char *append_absolute_file_to_dir_with (const char *fname,
++					       const char *root,
++					       cpp_dir *dir);
+ static bool validate_pch (cpp_reader *, _cpp_file *file, const char *pchname);
+ static int pchf_save_compare (const void *e1, const void *e2);
+ static int pchf_compare (const void *d_p, const void *e_p);
+@@ -2000,6 +2005,408 @@ make_cpp_dir (cpp_reader *pfile, const char *dir_name, int sysp)
+   return dir;
+ }
+ 
++#define expand_if_necessary(ptr, size, idx, additional_size, small_buf) if (additional_size > size || idx >= (size - additional_size)) { char *new_ptr = XCNEWVEC (char, ((size * 2) + additional_size + 1)); memcpy (new_ptr, ptr, size * 2); if (ptr != small_buf) { free (ptr); } ptr = new_ptr; size *= 2; size += additional_size + 1; }
++#define expand_if_necessary_one(ptr, size, idx, small_buf) if (idx >= size) { char *new_ptr = XCNEWVEC (char, size * 2); memcpy(new_ptr, ptr, size * 2); if (ptr != small_buf) { free (ptr); } ptr = new_ptr; size *= 2; }
++#define dirty_push(ptr, size, idx, c) { ptr[idx] = c; ++idx;  }
++#define safe_push(ptr, size, idx, c, small_buf) { expand_if_necessary_one (ptr, size, idx, small_buf); dirty_push (ptr, size, idx, c);  }
++#define safe_append(ptr, size, idx, cfirst, csize, small_buf) { expand_if_necessary (ptr, size, idx, csize, small_buf); for(unsigned int i = 0; i < csize; ++i) { dirty_push (ptr, size, idx, cfirst[i]); } }
++
++bool
++cpp_search_path_with_dir (const char *path, unsigned int path_len,
++			  cpp_dir *dir_list,
++			  bool is_angled, cpp_dir *maybe_lookup_dir,
++			  cpp_dir **found_dir)
++{
++  if (path_len == 0 || (maybe_lookup_dir == NULL && dir_list == NULL))
++    {
++      /* nothing to do */
++      if (found_dir)
++	*found_dir = NULL;
++      return false;
++    }
++  if (IS_ANY_ABSOLUTE_PATH_N(path, path_len))
++    {
++      /* there is nothing to put in found_dir, since it was absolute */
++      struct stat buf;
++      if (stat(path, &buf) == 0)
++	{
++	  if (found_dir)
++	    *found_dir = NULL;
++	  return true;
++	}
++      return false;
++    }
++
++  char *current_path = NULL;
++  bool result = false;
++  if (maybe_lookup_dir && !is_angled)
++    {
++      /* just try to see if it exists on the local path first  */
++      if (maybe_lookup_dir->construct)
++	current_path = maybe_lookup_dir->construct (path, maybe_lookup_dir);
++      else
++	current_path = append_file_to_dir (path, maybe_lookup_dir);
++      struct stat buf;
++      if (stat (current_path, &buf) == 0)
++	{
++	  if (found_dir)
++	    *found_dir = maybe_lookup_dir;
++	  result = true;
++	  goto done;
++	}
++      free ((void*)current_path);
++      current_path = NULL;
++    }
++
++  for (cpp_dir* dir = dir_list; dir; dir = dir->next)
++    {
++      if (dir->construct)
++	current_path = dir->construct (path, dir);
++      else
++	current_path = append_file_to_dir (path, dir);
++      struct stat buf;
++      if (stat (current_path, &buf) == 0)
++	{
++	  if (found_dir)
++	    *found_dir = dir;
++	  result = true;
++	  goto done;
++	}
++      free ((void*)current_path);
++      current_path = NULL;
++    }
++done:
++  free ((void*)current_path);
++  return result;
++}
++
++cpp_dep_pattern *
++cpp_make_dep_pattern (const char *pattern, unsigned int pattern_len,
++		       bool is_exported, bool is_angled, location_t loc)
++{
++  if (!pattern || pattern_len == 0)
++    return NULL;
++
++  static const char recursive_replacement[] = ".*";
++  static const unsigned int recursive_replacement_size = 2;
++  static const char replacement[] = "[^/\\]*";
++  static const unsigned int replacement_size = 6;
++  static const char separator_replacement[] = "[/\\]";
++  static const unsigned int separator_replacement_size = 4;
++
++  bool single_star_found = false;
++  bool double_star_found = false;
++  unsigned int last_root_separator = 0;
++
++  char small_target_pattern_buffer[512];
++  unsigned int target_pattern_capacity = 512;
++  char *target_pattern = small_target_pattern_buffer;
++  unsigned int target_pattern_size = 0;
++
++  for (unsigned int idx = 0; idx < pattern_len; ++idx)
++    {
++      const char c = pattern[idx];
++      switch (c)
++	{
++	  case '*':
++	    {
++	      if (idx < pattern_len && pattern[idx + 1] == '*')
++		{
++		  double_star_found = true;
++		  safe_append (target_pattern, target_pattern_capacity,
++			      target_pattern_size,
++			      recursive_replacement,
++			      recursive_replacement_size,
++			      small_target_pattern_buffer);
++		  ++idx; // move things forward
++		}
++	      else
++		{
++		  single_star_found = true;
++		  safe_append (target_pattern, target_pattern_capacity,
++			      target_pattern_size,
++			      replacement, replacement_size,
++			      small_target_pattern_buffer);
++		}
++	      break;
++	    }
++	  case ')':
++	  case '(':
++	  case '[':
++	  case ']':
++	  case '{':
++	  case '}':
++	  case '^':
++	  case '$':
++	  case '.':
++	  case '+':
++	  case '?':
++	  case '|':
++	    safe_push (target_pattern, target_pattern_capacity,
++		      target_pattern_size, '\\',
++		      small_target_pattern_buffer);
++	    safe_push (target_pattern, target_pattern_capacity,
++		      target_pattern_size, c,
++		      small_target_pattern_buffer);
++	    break;
++	  case '\\':
++	  case '/':
++	    if (!single_star_found && !double_star_found)
++	      last_root_separator = idx;
++	    safe_append (target_pattern, target_pattern_capacity,
++		      target_pattern_size, separator_replacement,
++		      separator_replacement_size,
++		      small_target_pattern_buffer);
++	    break;
++	  default:
++	    safe_push (target_pattern, target_pattern_capacity,
++		      target_pattern_size, c,
++		      small_target_pattern_buffer);
++	}
++    }
++
++  if (!single_star_found && !double_star_found)
++    {
++      /* high possibility this is a file; root pattern is the whole object */
++      last_root_separator = target_pattern_size;
++    }
++
++  safe_append (target_pattern, target_pattern_capacity,
++	      target_pattern_size, "$\0", 2,
++	      small_target_pattern_buffer);
++
++  re_pattern_buffer* buf = XCNEW (re_pattern_buffer);
++  /* set the RE ryntax we're using -- extended posix is generally the simplest
++     to work with here for the path manipulations we're doing */
++  reg_syntax_t old_syntax = re_set_syntax (RE_SYNTAX_POSIX_EXTENDED);
++  const char *regex_err = re_compile_pattern (&target_pattern[0],
++					      target_pattern_size - 1, buf);
++  /* don't forget to set it back to the old syntax before we started */
++  re_set_syntax (old_syntax);
++  if (regex_err != NULL)
++    {
++      free ((void*)buf);
++      return NULL;
++    }
++
++  cpp_dep_pattern *dep = XCNEW (cpp_dep_pattern);
++
++  dep->pattern = XCNEWVEC (char, pattern_len + 1);
++  dep->pattern_len = pattern_len;
++  memcpy (dep->pattern, pattern, pattern_len);
++  dep->pattern[dep->pattern_len] = '\0';
++
++  dep->regex_source = XCNEWVEC (char, target_pattern_size);
++  dep->regex_source_len = target_pattern_size - 1;
++  memcpy (dep->regex_source, target_pattern, target_pattern_size);
++  dep->regex_source[dep->regex_source_len] = '\0';
++
++  dep->pattern_regex = buf;
++
++  const unsigned int pattern_root_len = last_root_separator;
++  dep->pattern_root = XCNEWVEC (char, pattern_root_len + 1);
++  memcpy (dep->pattern_root, pattern, pattern_root_len);
++  dep->pattern_root_len = pattern_root_len;
++  dep->pattern_root[dep->pattern_root_len] = '\0';
++
++  dep->is_exported_p = is_exported;
++  dep->is_angled_p = is_angled;
++  dep->pattern_has_search = single_star_found;
++  dep->pattern_has_recursive_search = double_star_found;
++  dep->loc = loc;
++  dep->next = NULL;
++
++  return dep;
++}
++
++cpp_dep_pattern *
++cpp_copy_dep_pattern (const cpp_dep_pattern *pattern)
++{
++  re_pattern_buffer* buf = XCNEW (re_pattern_buffer);
++  /* set the RE ryntax we're using -- extended posix is generally the simplest
++     to work with here for the path manipulations we're doing */
++  reg_syntax_t old_syntax = re_set_syntax (RE_SYNTAX_POSIX_EXTENDED);
++  const char *regex_err = re_compile_pattern (pattern->regex_source,
++					      pattern->regex_source_len, buf);
++  /* don't forget to set it back to the old syntax before we started */
++  re_set_syntax (old_syntax);
++  if (regex_err != NULL)
++    {
++      free ((void*)buf);
++      return NULL;
++    }
++
++  cpp_dep_pattern *dep = XCNEW (cpp_dep_pattern);
++
++  dep->pattern = XCNEWVEC (char, pattern->pattern_len + 1);
++  dep->pattern_len = pattern->pattern_len;
++  memcpy (dep->pattern, pattern, pattern->pattern_len);
++  dep->pattern[dep->pattern_len] = '\0';
++
++  dep->pattern_root = XCNEWVEC (char, pattern->pattern_root_len + 1);
++  memcpy (dep->pattern_root, pattern, pattern->pattern_root_len);
++  dep->pattern_root_len = pattern->pattern_root_len;
++  dep->pattern_root[dep->pattern_root_len] = '\0';
++
++  dep->pattern_regex = buf;
++
++  dep->regex_source = XCNEWVEC (char, pattern->regex_source_len + 1);
++  dep->regex_source_len = pattern->regex_source_len;
++  memcpy (dep->regex_source, pattern->regex_source, pattern->regex_source_len);
++  dep->pattern[dep->regex_source_len] = '\0';
++
++  dep->is_exported_p = pattern->is_exported_p;
++  dep->is_angled_p = pattern->is_angled_p;
++  dep->pattern_has_search = pattern->pattern_has_search;
++  dep->pattern_has_recursive_search = pattern->pattern_has_recursive_search;
++  dep->loc = pattern->loc;
++  return dep;
++}
++
++void
++cpp_destroy_dep_pattern (cpp_dep_pattern *dep)
++{
++  if (dep == NULL)
++    return;
++  free ((void*)dep->pattern_regex);
++  free ((void*)dep->pattern);
++  free ((void*)dep->pattern_root);
++  free ((void*)dep->regex_source);
++  free ((void*)dep);
++}
++
++void
++cpp_destroy_all_dep_patterns (cpp_dep_pattern *dep)
++{
++  for (cpp_dep_pattern *next = NULL; dep != NULL; dep = next)
++    {
++      next = dep->next;
++      cpp_destroy_dep_pattern (dep);
++    }
++}
++
++void
++_cpp_destroy_dep_patterns (cpp_reader *pfile)
++{
++  cpp_destroy_all_dep_patterns (pfile->depend_patterns);
++  pfile->depend_patterns = NULL;
++}
++
++static void
++add_dir_into_mkdeps (cpp_reader *pfile,
++		     const cpp_dep_pattern *dep, const char *pathname)
++{
++  DIR *dp = opendir(pathname);
++  if (dp == NULL)
++    return;
++
++  struct dirent *entry = readdir(dp);
++  for (; entry; entry = readdir(dp))
++    {
++      switch (entry->d_type)
++	{
++	  case DT_DIR:
++	    if (dep->pattern_has_recursive_search)
++	      {
++		add_dir_into_mkdeps (pfile, dep, entry->d_name);
++	      }
++	    break;
++	   default:
++	    deps_add_dep (pfile->deps, entry->d_name);
++	    break;
++	}
++    }
++
++  closedir(dp);
++}
++
++void
++_cpp_add_depend (cpp_reader *pfile, const char *pattern,
++		 bool is_exported, bool is_angled, location_t loc)
++{
++  cpp_dep_pattern *dep = cpp_make_dep_pattern(pattern,
++					      (unsigned int)strlen(pattern),
++					      is_exported, is_angled, loc);
++  if (dep == NULL)
++    return;
++  if (!pfile->depend_patterns)
++    {
++      pfile->depend_patterns = dep;
++    }
++  else
++    {
++      cpp_dep_pattern *curr = pfile->depend_patterns;
++      while (curr->next) curr = curr->next;
++      curr->next = dep;
++    }
++  dep->next = NULL;
++
++  /* attempt to fix up paths after-the-fact... */
++  cpp_dir *cur_dir = _cpp_get_file_dir (cpp_get_file (pfile->buffer));
++  cpp_dir *found_dir = NULL;
++  if (dep->pattern_root_len == 0)
++    {
++      if (!dep->pattern_has_search && !dep->pattern_has_recursive_search)
++	{
++	  /* we have a single non-search file; just try to find it and root
++	     ourselves in that dir */
++	  if (cpp_search_path_with_dir (dep->pattern, dep->pattern_len,
++				    pfile->embed_include, is_angled, cur_dir,
++				    &found_dir) && found_dir != NULL)
++	    {
++	      /* we might have a dir we can use here, make sure it works */
++	      char* new_pattern_root =
++		append_absolute_file_to_dir (dep->pattern_root, found_dir);
++	      free ((void*)dep->pattern_root);
++	      dep->pattern_root = new_pattern_root;
++	      dep->pattern_root_len = strlen (dep->pattern_root);
++	    }
++	}
++    }
++  else
++    {
++      if (cpp_search_path_with_dir (dep->pattern_root, dep->pattern_root_len,
++				    pfile->embed_include, is_angled, cur_dir,
++				    &found_dir) && found_dir != NULL)
++	{
++	  /* we might have a dir we can use here, make sure it works */
++	  char* new_pattern_root =
++	    append_absolute_file_to_dir (dep->pattern_root, found_dir);
++	  free ((void*)dep->pattern_root);
++	  dep->pattern_root = new_pattern_root;
++	  dep->pattern_root_len = strlen (dep->pattern_root);
++	}
++    }
++
++  /* do callback */
++  cpp_callbacks *cbs = cpp_get_callbacks (pfile);
++  if (cbs->depend)
++    cbs->depend (pfile, dep);
++  // if necessary...
++  int sysp = pfile->line_table->highest_line > 1 && pfile->buffer
++    ? pfile->buffer->sysp
++    : 0;
++  bool print_dep = CPP_OPTION (pfile, deps.style) > (is_angled || !!sysp);
++  if (!pfile->deps || !print_dep)
++    return;
++
++  /* add dependencies to the Makefile.d mkdeps */
++  /* for single files, no checking is required; just add it */
++  if (!dep->pattern_has_search && !dep->pattern_has_recursive_search) {
++    deps_add_dep (pfile->deps, dep->pattern_root);
++  }
++  else
++    {
++      add_dir_into_mkdeps (pfile, dep, dep->pattern_root);
++  }
++}
++
++#undef expand_if_necessary
++#undef expand_if_necessary_one
++#undef dirty_push
++#undef safe_push
++#undef safe_append
++
+ /* Create a new block of memory for file hash entries.  */
+ static void
+ allocate_file_hash_entries (cpp_reader *pfile)
+@@ -2440,6 +2847,53 @@ append_file_to_dir (const char *fname, cpp_dir *dir)
+   return path;
+ }
+ 
++/* Append the file name to the (absolute) directory to create the path, but don't
++   turn / into // or // into ///; // may be a namespace escape.  */
++static char *
++append_absolute_file_to_dir_with (const char *fname, const char *root,
++				  cpp_dir *dir)
++{
++  if (IS_ANY_ABSOLUTE_PATH_N (dir->name, dir->len))
++    return append_file_to_dir (fname, dir);
++
++  char *path = NULL;
++  size_t root_len = strlen (root);
++  bool root_ends_with_sep = root_len && IS_DIR_SEPARATOR (root[root_len - 1]);
++  size_t dlen = dir->len;
++  size_t flen = strlen (fname);
++  bool ends_with_sep = dlen && IS_DIR_SEPARATOR (dir->name[dlen - 1]);
++  size_t plen = root_len + (root_ends_with_sep ? 0 : 1) + dlen
++		+ flen + (ends_with_sep ? 0 : 1);
++
++  path = XNEWVEC (char, plen + 1);
++  memcpy (path, root, root_len);
++  if (root_len && !root_ends_with_sep)
++    {
++      path[root_len] = '/';
++      ++root_len;
++    }
++  memcpy (path + root_len, dir->name, dlen);
++  if (dlen && !ends_with_sep)
++    {
++      path[root_len + dlen] = '/';
++      ++dlen;
++    }
++  memcpy (path + root_len + dlen, fname, flen + 1);
++
++  return path;
++}
++
++/* Append the file name to the (absolute) directory to create the path, but don't
++   turn / into // or // into ///; // may be a namespace escape.  */
++static char *
++append_absolute_file_to_dir (const char *fname, cpp_dir *dir)
++{
++  char *cwd = getcwd (NULL, 0);
++  char *p = append_absolute_file_to_dir_with (fname, cwd, dir);
++  free ((void*)cwd);
++  return p;
++}
++
+ /* Read a space delimited string of unlimited length from a stdio
+    file F.  */
+ static char *
+@@ -2641,7 +3095,7 @@ cpp_get_prev (cpp_buffer *b)
+ {
+   return b->prev;
+ }
+-
++
+ /* This data structure holds the list of header files that were seen
+    while the PCH was being built.  The 'entries' field is kept sorted
+    in memcmp() order; yes, this means that on little-endian systems,
+diff --git a/libcpp/include/cpplib.h b/libcpp/include/cpplib.h
+index bc0d7714e96..08af99d01a5 100644
+--- a/libcpp/include/cpplib.h
++++ b/libcpp/include/cpplib.h
+@@ -35,6 +35,7 @@ typedef struct cpp_hashnode cpp_hashnode;
+ typedef struct cpp_macro cpp_macro;
+ typedef struct cpp_callbacks cpp_callbacks;
+ typedef struct cpp_dir cpp_dir;
++typedef struct cpp_dep_pattern cpp_dep_pattern;
+ 
+ struct _cpp_file;
+ 
+@@ -779,6 +780,12 @@ enum cpp_warning_reason {
+    header is otherwise unfound.  */
+ typedef const char *(*missing_header_cb)(cpp_reader *, const char *header, cpp_dir **);
+ 
++/* Callback for successfully processed #depend <>/#depend "" directives.
++   Downstream entites can use copy_cpp_dep_pattern to hold their own
++   copies of dependency patterns, and cpp_destroy_dep_pattern to free
++   them. */
++typedef void(cpp_depend_cb)(cpp_reader *, const cpp_dep_pattern *);
++
+ /* Call backs to cpplib client.  */
+ struct cpp_callbacks
+ {
+@@ -794,6 +801,7 @@ struct cpp_callbacks
+   void (*dir_change) (cpp_reader *, const char *);
+   void (*include) (cpp_reader *, location_t, const unsigned char *,
+ 		   const char *, int, const cpp_token **);
++  cpp_depend_cb* depend;
+   void (*define) (cpp_reader *, location_t, cpp_hashnode *);
+   void (*undef) (cpp_reader *, location_t, cpp_hashnode *);
+   void (*ident) (cpp_reader *, location_t, const cpp_string *);
+@@ -918,6 +926,45 @@ struct cpp_dir
+   DEV_T_CPP;
+ };
+ 
++/* Chain of directories to look through for #depend'd files in.  */
++struct cpp_dep_pattern
++{
++  /* NULL-terminated singly-linked list.  */
++  struct cpp_dep_pattern *next;
++
++  /* pattern of the directive, NUL-terminated.  */
++  char *pattern;
++  unsigned int pattern_len;
++
++  /* root directory of the pattern before any separators
++     or stars, NUL-terminated. */
++  char *pattern_root;
++  unsigned int pattern_root_len;
++
++  /* POSIX Extended regular expression recreation source.  */
++  char *regex_source;
++  unsigned int regex_source_len;
++
++  /* pre-compiled regex built off the pattern */
++  struct re_pattern_buffer *pattern_regex;
++
++  /* location where the directive was found */
++  location_t loc;
++
++  /* is this an "export" name (applies to other translation units
++     in e.g. a C++ module) */
++  bool is_exported_p;
++
++  /* whether this came from <> or "" header-name spelling */
++  bool is_angled_p;
++
++  /* whether there is a single `*` not followed by another `*` */
++  bool pattern_has_search;
++
++  /* whether there is a `**` in the search anywhere */
++  bool pattern_has_recursive_search;
++};
++
+ /* The kind of the cpp_macro.  */
+ enum cpp_macro_kind {
+   cmk_macro,	/* An ISO macro (token expansion).  */
+@@ -1173,6 +1220,13 @@ extern cpp_callbacks *cpp_get_callbacks (cpp_reader *) ATTRIBUTE_PURE;
+ extern void cpp_set_callbacks (cpp_reader *, cpp_callbacks *);
+ extern class mkdeps *cpp_get_deps (cpp_reader *) ATTRIBUTE_PURE;
+ 
++/* given a forward linked list of dirs, find the given "path"
++   */
++extern bool cpp_search_path_with_dir (const char *path, unsigned int path_len,
++				      cpp_dir *dir_list,
++				      cpp_dir *maybe_lookup_dir,
++				      cpp_dir **found_dir);
++
+ extern const char *cpp_probe_header_unit (cpp_reader *, const char *file,
+ 					  bool angle_p,  location_t);
+ 
+@@ -1578,6 +1632,13 @@ extern cpp_buffer *cpp_get_buffer (cpp_reader *);
+ extern struct _cpp_file *cpp_get_file (cpp_buffer *);
+ extern cpp_buffer *cpp_get_prev (cpp_buffer *);
+ extern void cpp_clear_file_cache (cpp_reader *);
++extern cpp_dep_pattern *cpp_make_dep_pattern (const char *, unsigned int,
++					      bool, bool, location_t);
++extern cpp_dep_pattern *cpp_copy_dep_pattern (const cpp_dep_pattern *);
++/* destroys the passed-in dep pattern but performs no other actions */
++extern void cpp_destroy_dep_pattern (cpp_dep_pattern *);
++/* destroys the passed-in dep pattern and every object linked in the list */
++extern void cpp_destroy_all_dep_patterns (cpp_dep_pattern *);
+ 
+ /* cpp_get_converted_source returns the contents of the given file, as it exists
+    after cpplib has read it and converted it from the input charset to the
+diff --git a/libcpp/init.cc b/libcpp/init.cc
+index a480d1d4a26..9190a0ee728 100644
+--- a/libcpp/init.cc
++++ b/libcpp/init.cc
+@@ -382,6 +382,7 @@ cpp_destroy (cpp_reader *pfile)
+   _cpp_destroy_hashtable (pfile);
+   _cpp_cleanup_files (pfile);
+   _cpp_destroy_iconv (pfile);
++  _cpp_destroy_dep_patterns (pfile);
+ 
+   _cpp_free_buff (pfile->a_buff);
+   _cpp_free_buff (pfile->u_buff);
+diff --git a/libcpp/internal.h b/libcpp/internal.h
+index 017e980a964..8e2186dcdda 100644
+--- a/libcpp/internal.h
++++ b/libcpp/internal.h
+@@ -477,10 +477,11 @@ struct cpp_reader
+   bool diagnose_dot_colon_from_macro_p;
+ 
+   /* Search paths for include files.  */
+-  struct cpp_dir *quote_include;	/* "" */
+-  struct cpp_dir *bracket_include;	/* <> */
+-  struct cpp_dir no_search_path;	/* No path.  */
+-  struct cpp_dir *embed_include;	/* #embed <> */
++  struct cpp_dir *quote_include;           /* "" */
++  struct cpp_dir *bracket_include;         /* <> */
++  struct cpp_dir no_search_path;           /* No path.  */
++  struct cpp_dir *embed_include;           /* #embed <> */
++  struct cpp_dep_pattern *depend_patterns; /* #depend <> */
+ 
+   /* Chain of all hashed _cpp_file instances.  */
+   struct _cpp_file *all_files;
+@@ -784,6 +785,8 @@ extern const char *_cpp_find_header_unit (cpp_reader *, const char *file,
+ 					  bool angle_p,  location_t);
+ extern int _cpp_stack_embed (cpp_reader *, const char *, bool,
+ 			     cpp_embed_params *);
++extern void _cpp_add_depend (cpp_reader *, const char *, bool, bool,
++			     location_t);
+ extern void _cpp_fake_include (cpp_reader *, const char *);
+ extern bool _cpp_stack_file (cpp_reader *, _cpp_file*, include_type, location_t);
+ extern bool _cpp_stack_include (cpp_reader *, const char *, int,
+@@ -792,6 +795,7 @@ extern int _cpp_compare_file_date (cpp_reader *, const char *, int);
+ extern void _cpp_report_missing_guards (cpp_reader *);
+ extern void _cpp_init_files (cpp_reader *);
+ extern void _cpp_cleanup_files (cpp_reader *);
++extern void _cpp_destroy_dep_patterns (cpp_reader *);
+ extern void _cpp_pop_file_buffer (cpp_reader *, struct _cpp_file *,
+ 				  const unsigned char *);
+ extern bool _cpp_save_file_entries (cpp_reader *pfile, FILE *f);
+diff --git a/libstdc++-v3/ChangeLog b/libstdc++-v3/ChangeLog
+index 0db437b5322..ac2415b5b51 100644
+--- a/libstdc++-v3/ChangeLog
++++ b/libstdc++-v3/ChangeLog
+@@ -1,3 +1,12 @@
++2026-04-23  Bjorkus "ThePhD" Dorkus  <phdofthehouse@gmail.com>
++
++	* include/Makefile.in: "regenerate" for new embed header
++	* include/Makefile.am: "regenerate" for new embed header
++	* include/bits/version.def: add __cpp_lib_embed definition and
++	stds[29] definition for eventual C++29 work.
++	* include/bits/version.h: regenerate.
++	* include/std/embed: new header for wg21/P1040r10 std::embed
++
+ 2026-04-22  Jakub Jelinek  <jakub@redhat.com>
+ 
+ 	* include/bits/version.def (reflection): Bump 202506L to 202603L
+diff --git a/libstdc++-v3/include/Makefile.am b/libstdc++-v3/include/Makefile.am
+index e9e46139da2..3e9895a7f0f 100644
+--- a/libstdc++-v3/include/Makefile.am
++++ b/libstdc++-v3/include/Makefile.am
+@@ -34,6 +34,7 @@ std_freestanding = \
+ 	${std_srcdir}/concepts \
+ 	${std_srcdir}/contracts \
+ 	${std_srcdir}/coroutine \
++	${std_srcdir}/embed \
+ 	${std_srcdir}/expected \
+ 	${std_srcdir}/functional \
+ 	${std_srcdir}/generator \
+diff --git a/libstdc++-v3/include/Makefile.in b/libstdc++-v3/include/Makefile.in
+index f3d2f58dbe4..7c9b2153bfb 100644
+--- a/libstdc++-v3/include/Makefile.in
++++ b/libstdc++-v3/include/Makefile.in
+@@ -127,11 +127,11 @@ am__v_P_1 = :
+ AM_V_GEN = $(am__v_GEN_@AM_V@)
+ am__v_GEN_ = $(am__v_GEN_@AM_DEFAULT_V@)
+ am__v_GEN_0 = @echo "  GEN     " $@;
+-am__v_GEN_1 = 
++am__v_GEN_1 =
+ AM_V_at = $(am__v_at_@AM_V@)
+ am__v_at_ = $(am__v_at_@AM_DEFAULT_V@)
+ am__v_at_0 = @
+-am__v_at_1 = 
++am__v_at_1 =
+ depcomp =
+ am__depfiles_maybe =
+ SOURCES =
+@@ -364,11 +364,11 @@ PWD_COMMAND = $${PWDCMD-pwd}
+ STAMP = echo timestamp >
+ toolexecdir = $(glibcxx_toolexecdir)
+ toolexeclibdir = $(glibcxx_toolexeclibdir)
+-@ENABLE_WERROR_FALSE@WERROR_FLAG = 
++@ENABLE_WERROR_FALSE@WERROR_FLAG =
+ @ENABLE_WERROR_TRUE@WERROR_FLAG = -Werror
+-@ENABLE_EXTERN_TEMPLATE_FALSE@XTEMPLATE_FLAGS = 
++@ENABLE_EXTERN_TEMPLATE_FALSE@XTEMPLATE_FLAGS =
+ @ENABLE_EXTERN_TEMPLATE_TRUE@XTEMPLATE_FLAGS = -fno-implicit-templates
+-@GLIBCXX_LDBL_ALT128_COMPAT_FALSE@LDBL_128_FLAGS = 
++@GLIBCXX_LDBL_ALT128_COMPAT_FALSE@LDBL_128_FLAGS =
+ @GLIBCXX_LDBL_ALT128_COMPAT_TRUE@LDBL_128_FLAGS = $(LONG_DOUBLE_128_FLAGS)
+ 
+ # These bits are all figured out from configure.  Look in acinclude.m4
+@@ -377,7 +377,7 @@ CONFIG_CXXFLAGS = \
+ 	$(SECTION_FLAGS) $(HWCAP_CFLAGS) -frandom-seed=$@ $(LDBL_128_FLAGS)
+ 
+ WARN_CXXFLAGS = \
+-	$(WARN_FLAGS) $(WERROR_FLAG) -fdiagnostics-show-location=once 
++	$(WARN_FLAGS) $(WERROR_FLAG) -fdiagnostics-show-location=once
+ 
+ 
+ # -I/-D flags to pass when compiling.
+@@ -395,6 +395,7 @@ std_freestanding = \
+ 	${std_srcdir}/concepts \
+ 	${std_srcdir}/contracts \
+ 	${std_srcdir}/coroutine \
++	${std_srcdir}/embed \
+ 	${std_srcdir}/expected \
+ 	${std_srcdir}/functional \
+ 	${std_srcdir}/generator \
+@@ -1224,11 +1225,11 @@ experimental_bits_headers = \
+ 	${experimental_bits_srcdir}/string_view.tcc \
+ 	${experimental_bits_filesystem_headers}
+ 
+-@ENABLE_FILESYSTEM_TS_FALSE@experimental_filesystem_headers = 
++@ENABLE_FILESYSTEM_TS_FALSE@experimental_filesystem_headers =
+ @ENABLE_FILESYSTEM_TS_TRUE@experimental_filesystem_headers = \
+ @ENABLE_FILESYSTEM_TS_TRUE@	${experimental_srcdir}/filesystem
+ 
+-@ENABLE_FILESYSTEM_TS_FALSE@experimental_bits_filesystem_headers = 
++@ENABLE_FILESYSTEM_TS_FALSE@experimental_bits_filesystem_headers =
+ @ENABLE_FILESYSTEM_TS_TRUE@experimental_bits_filesystem_headers = \
+ @ENABLE_FILESYSTEM_TS_TRUE@	${experimental_bits_srcdir}/fs_dir.h \
+ @ENABLE_FILESYSTEM_TS_TRUE@	${experimental_bits_srcdir}/fs_fwd.h \
+@@ -1285,7 +1286,7 @@ c_compatibility_builddir = .
+ @GLIBCXX_C_HEADERS_C_GLOBAL_TRUE@	${c_compatibility_srcdir}/stdckdint.h \
+ @GLIBCXX_C_HEADERS_C_GLOBAL_TRUE@	${c_compatibility_srcdir}/stdlib.h
+ 
+-@GLIBCXX_C_HEADERS_C_STD_TRUE@c_compatibility_headers = 
++@GLIBCXX_C_HEADERS_C_STD_TRUE@c_compatibility_headers =
+ @GLIBCXX_C_HEADERS_C_TRUE@c_compatibility_headers = \
+ @GLIBCXX_C_HEADERS_C_TRUE@	${c_compatibility_srcdir}/assert.h \
+ @GLIBCXX_C_HEADERS_C_TRUE@	${c_compatibility_srcdir}/complex.h \
+@@ -1405,7 +1406,7 @@ parallel_headers = \
+ 	${parallel_srcdir}/unique_copy.h \
+ 	${parallel_srcdir}/workstealing.h
+ 
+-@GLIBCXX_C_HEADERS_COMPATIBILITY_FALSE@c_compatibility_headers_extra = 
++@GLIBCXX_C_HEADERS_COMPATIBILITY_FALSE@c_compatibility_headers_extra =
+ 
+ # Some "C" header schemes require the "C" compatibility headers.
+ # For --enable-cheaders=c_std
+@@ -1474,7 +1475,7 @@ pch_output_anchors = \
+ 	${pch1_output_anchor} ${pch2_output_anchor} ${pch3_output_anchor}
+ 
+ PCHFLAGS = -x c++-header -nostdinc++ $(CXXFLAGS) $(VTV_PCH_CXXFLAGS)
+-@GLIBCXX_BUILD_PCH_FALSE@pch_build = 
++@GLIBCXX_BUILD_PCH_FALSE@pch_build =
+ @GLIBCXX_BUILD_PCH_TRUE@pch_build = ${pch_output}
+ 
+ # List of all timestamp files.  By keeping only one copy of this list, both
+diff --git a/libstdc++-v3/include/bits/version.def b/libstdc++-v3/include/bits/version.def
+index 4db17a6d98c..fec7ce24fb5 100644
+--- a/libstdc++-v3/include/bits/version.def
++++ b/libstdc++-v3/include/bits/version.def
+@@ -2409,6 +2409,15 @@ ftms = {
+   };
+ };
+ 
++ftms = {
++  name = embed;
++  values = {
++    v =  202606;
++    cxxmin = 29;
++    extra_cond = "__has_builtin(__builtin_std_embed)";
++  };
++};
++
+ // Standard test specifications.
+ stds[97] = ">= 199711L";
+ stds[03] = ">= 199711L";
+@@ -2418,6 +2427,7 @@ stds[17] = ">= 201703L";
+ stds[20] = ">= 202002L";
+ stds[23] = ">= 202100L"; // Should be 202302L but Clang 16 uses 202101L
+ stds[26] = ">  202302L"; // TODO: update when finalized
++stds[29] = ">  202606L"; // TODO: update when finalized
+ 
+ // Local Variables:
+ // compile-command: "autogen version.def"
+diff --git a/libstdc++-v3/include/bits/version.h b/libstdc++-v3/include/bits/version.h
+index 62bc83f7ea1..48dd643eea7 100644
+--- a/libstdc++-v3/include/bits/version.h
++++ b/libstdc++-v3/include/bits/version.h
+@@ -2675,4 +2675,14 @@
+ #endif /* !defined(__cpp_lib_is_structural) */
+ #undef __glibcxx_want_is_structural
+ 
++#if !defined(__cpp_lib_embed)
++# if (__cplusplus >  202606L) && (__has_builtin(__builtin_std_embed))
++#  define __glibcxx_embed 202606L
++#  if defined(__glibcxx_want_all) || defined(__glibcxx_want_embed)
++#   define __cpp_lib_embed 202606L
++#  endif
++# endif
++#endif /* !defined(__cpp_lib_embed) */
++#undef __glibcxx_want_embed
++
+ #undef __glibcxx_want_all
+diff --git a/libstdc++-v3/include/std/embed b/libstdc++-v3/include/std/embed
+new file mode 100644
+index 00000000000..7899bb5270b
+--- /dev/null
++++ b/libstdc++-v3/include/std/embed
+@@ -0,0 +1,272 @@
++// <embed> -*- C++ -*-
++
++// Copyright The GNU Toolchain Authors.
++//
++// This file is part of the GNU ISO C++ Library.  This library is free
++// software; you can redistribute it and/or modify it under the
++// terms of the GNU General Public License as published by the
++// Free Software Foundation; either version 3, or (at your option)
++// any later version.
++
++// This library is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++
++// Under Section 7 of GPL version 3, you are granted additional
++// permissions described in the GCC Runtime Library Exception, version
++// 3.1, as published by the Free Software Foundation.
++
++// You should have received a copy of the GNU General Public License and
++// a copy of the GCC Runtime Library Exception along with this program;
++// see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
++// <http://www.gnu.org/licenses/>.
++
++/** @file include/embed
++ *  This is a proposed Standard C++ Library header.
++ *  Made with <3.
++ */
++
++#ifndef _GLIBCXX_EMBED
++#define _GLIBCXX_EMBED
++
++#ifdef _GLIBCXX_SYSHDR
++#pragma GCC system_header
++#endif
++
++#define __glibcxx_want_span
++#define __glibcxx_want_optional
++#define __glibcxx_want_embed
++#include <bits/version.h>
++
++#include <span>
++#include <optional>
++#include <string_view>
++#include <cstddef>
++#include <cassert>
++
++/* the version checking for C++29 is not yet ready; we cannot rely solely on
++   __cpp_lib_embed right now and instead only provide a check
++   on __has_builtin(__builtin_std_embed)
++ */
++#if __has_builtin(__builtin_std_embed)
++/* #if defined(__cpp_lib_embed) && __cpp_lib_embed > 0 */
++namespace std _GLIBCXX_VISIBILITY(default)
++{
++_GLIBCXX_BEGIN_NAMESPACE_VERSION
++
++  /**
++   * @defgroup embed Binary data at compile-time
++   * @addtogroup embed
++   * @since C++29
++   * @{
++   */
++
++/// @cond undocumented
++namespace __embed
++{
++
++  enum __builtin_embed_status
++    {
++      __file_not_found = 0,
++      __file_found = 1,
++      __file_found_no_depends = 2,
++      __file_found_empty = 3,
++    };
++
++  inline constexpr unsigned int __quoted_search_distance = 0b101;
++
++#define _EMBED_FAIL(...) \
++  do { __glibcxx_assert(false && __VA_ARGS__); __builtin_abort(); } while(false)
++
++  // generic implementation to save on copy-paste nonsense
++  // and not come up with clever constraints for the `__resource`
++  // type.
++  template<typename _By, size_t _Ex, typename _Sv>
++    [[nodiscard]]
++    consteval span<const _By, _Ex>
++    __embed(const _Sv& __resource, size_t __offset,
++	    [[maybe_unused]] const optional<size_t>& __limit)
++    noexcept
++    {
++      int __status = -1;
++      _By const* __ptr = nullptr;
++      size_t __size = 0;
++      if constexpr (_Ex != dynamic_extent)
++	{
++	  __ptr = __builtin_std_embed(__quoted_search_distance, __status,
++				      __size, __ptr,
++				      __resource.size(), __resource.data(),
++				      __offset, _Ex);
++	}
++      else
++	{
++	  __ptr = __limit
++	    ? __builtin_std_embed(__quoted_search_distance, __status,
++				  __size, __ptr,
++				  __resource.size(), __resource.data(),
++				  __offset, *__limit)
++	    : __builtin_std_embed(__quoted_search_distance, __status,
++				  __size, __ptr,
++				  __resource.size(), __resource.data(),
++				  __offset);
++	}
++      if (__status == __file_not_found)
++	{
++	  _EMBED_FAIL("the file was not found");
++	}
++      if (__status == __file_found_no_depends)
++	{
++	  _EMBED_FAIL("file not covered by a '#depend' directive");
++	}
++      if constexpr (_Ex != dynamic_extent)
++	{
++	  if (_Ex > __size)
++	    {
++	      _EMBED_FAIL("extent is larger than the file's size");
++	    }
++	  __size = _Ex;
++	}
++      if (__status == __file_found_empty)
++	{
++	  return span<const _By, _Ex>();
++	}
++      return span<const _By, _Ex>(__ptr, __size);
++    }
++
++#undef _EMBED_FAIL
++
++}
++/// @endcond
++
++
++  /// @brief Embed a backing array of binary data of type `const _By`
++  /// @tparam _By Shall be one of `unsigned char`, `char`, or `std::byte`.
++  /// @param[in] __resource The name of the resource. The treatment of the
++  ///                       encoding of the string is unspecified
++  ///                       and subject to frontend builtins.
++  /// @param[in] __offset The number of `const T` elements to skip from the
++  ///                     resource. Applied before the limit.
++  /// @param[in] __limit The maximum number of `const T` elements to read,
++  ///                    after the offset is applied.
++  /// @return A view into the specified resource at `__offset` with up to
++  ///         `__limit` elements, or the rest of the resource if `__limit` is
++  ///         `nullopt`.
++  template<typename _By>
++    [[nodiscard]]
++    consteval span<const _By>
++    embed(string_view __resource, size_t __offset = 0, optional<size_t> __limit = nullopt)
++    noexcept
++    {
++      return __embed::__embed<_By, dynamic_extent>(__resource, __offset, __limit);
++    }
++
++  /// @brief Embed a backing array of binary data of type `const _By`
++  /// @tparam _By Shall be one of `unsigned char`, `char`, or `std::byte`.
++  /// @param[in] __resource The name of the resource. The treatment of the
++  ///                       encoding of the string is unspecified
++  ///                       and subject to frontend builtins.
++  /// @param[in] __offset The number of `const T` elements to skip from the
++  ///                     resource. Applied before the limit.
++  /// @param[in] __limit The maximum number of `const T` elements to read,
++  ///                    after the offset is applied.
++  /// @return A view into the specified resource at `__offset` with up to
++  ///         `__limit` elements, or the rest of the resource if `__limit` is
++  ///         `nullopt`.
++  template<typename _By>
++    [[nodiscard]]
++    consteval span<const _By>
++    embed(wstring_view __resource, size_t __offset = 0, optional<size_t> __limit = nullopt)
++    noexcept
++    {
++      return __embed::__embed<_By, dynamic_extent>(__resource, __offset, __limit);
++    }
++
++  /// @brief Embed a backing array of binary data of type `const _By`
++  /// @tparam _By Shall be one of `unsigned char`, `char`, or `std::byte`.
++  /// @param[in] __resource The name of the resource. The treatment of the
++  ///                       encoding of the string is unspecified
++  ///                       and subject to frontend builtins.
++  /// @param[in] __offset The number of `const T` elements to skip from the
++  ///                     resource. Applied before the limit.
++  /// @param[in] __limit The maximum number of `const T` elements to read,
++  ///                    after the offset is applied.
++  /// @return A view into the specified resource at `__offset` with up to
++  ///         `__limit` elements, or the rest of the resource if `__limit` is
++  ///         `nullopt`.
++  template<typename _By>
++    [[nodiscard]]
++    consteval span<const _By>
++    embed(u8string_view __resource, size_t __offset = 0, optional<size_t> __limit = nullopt)
++    noexcept
++    {
++      return __embed::__embed<_By, dynamic_extent>(__resource, __offset, __limit);
++    }
++
++  /// @brief Embed a backing array of binary data of type `const _By`
++  /// @tparam _By Shall be one of `unsigned char`, `char`, or `std::byte`.
++  /// @tparam _Ex The exact size of the data that will be returned.
++  /// @param[in] __resource The name of the resource. The treatment of the
++  ///                       encoding of the string is unspecified
++  ///                       and subject to frontend builtins.
++  /// @param[in] __offset The number of `const T` elements to skip from the
++  ///                     resource. Applied before the limit.
++  /// @return A view into the specified resource at `__offset` with exactly
++  ///         `_Ex` elements.
++  template<typename _By, size_t _Ex>
++    [[nodiscard]]
++    consteval span<const _By, _Ex>
++    embed(string_view __resource, size_t __offset = 0)
++    noexcept
++    {
++      return __embed::__embed<_By, _Ex>(__resource, __offset, nullopt);
++    }
++
++  /// @brief Embed a backing array of binary data of type `const _By`
++  /// @tparam _By Shall be one of `unsigned char`, `char`, or `std::byte`.
++  /// @tparam _Ex The exact size of the data that will be returned.
++  /// @param[in] __resource The name of the resource. The treatment of the
++  ///                       encoding of the string is unspecified
++  ///                       and subject to frontend builtins.
++  /// @param[in] __offset The number of `const T` elements to skip from the
++  ///                     resource. Applied before the limit.
++  /// @return A view into the specified resource at `__offset` with exactly
++  ///         `_Ex` elements.
++  template<typename _By, size_t _Ex>
++    [[nodiscard]]
++    consteval span<const _By, _Ex>
++    embed(wstring_view __resource, size_t __offset = 0)
++    noexcept
++    {
++      return __embed::__embed<_By, _Ex>(__resource, __offset, nullopt);
++    }
++
++  /// @brief Embed a backing array of binary data of type `const _By`
++  /// @tparam _By Shall be one of `unsigned char`, `char`, or `std::byte`.
++  /// @tparam _Ex The exact size of the data that will be returned.
++  /// @param[in] __resource The name of the resource. The treatment of the
++  ///                       encoding of the string is unspecified
++  ///                       and subject to frontend builtins.
++  /// @param[in] __offset The number of `const T` elements to skip from the
++  ///                     resource. Applied before the limit.
++  /// @return A view into the specified resource at `__offset` with exactly
++  ///         `_Ex` elements.
++  template<typename _By, size_t _Ex>
++    [[nodiscard]]
++    consteval span<const _By, _Ex>
++    embed(u8string_view __resource, size_t __offset = 0)
++    noexcept
++    {
++      return __embed::__embed<_By, _Ex>(__resource, __offset, nullopt);
++    }
++
++  /**
++   * @}
++   */
++
++
++_GLIBCXX_END_NAMESPACE_VERSION
++} // namespace std
++
++#endif // __cpp_lib_embed
++#endif // _GLIBCXX_EMBED
+-- 
+2.53.0
+
