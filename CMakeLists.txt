@@ -47,7 +47,7 @@ option(PHD_EMBED_EXAMPLES "Enable build of examples" OFF)
 option(PHD_EMBED_BENCHMARKS "Enable build of benchmarks" OFF)
 
 set(phd.embed.sources
-	"include/phd/embed.hpp"
+	"include/phd/embed/embed.hpp"
 )
 
 add_library(phd.embed INTERFACE)
