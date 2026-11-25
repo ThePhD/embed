@@ -2,8 +2,6 @@
 #define PHD_EXAMPLES_STD_LUA_LIVE_LIVE_HPP
 
 #include <phd/embed.hpp>
-#include <phd/make_static.hpp>
-#include <phd/fixed_string.hpp>
 
 #include <string_view>
 #include <string>

@@ -4,8 +4,6 @@
 #include <ctlua/core.hpp>
 
 #include <phd/embed.hpp>
-#include <phd/make_static.hpp>
-#include <phd/fixed_string.hpp>
 
 #include <string_view>
 #include <string>

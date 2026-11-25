@@ -1,31 +1,24 @@
-# Preprocessor Embed
+# `std::embed` and Preprocessor Embed
 
-[P1967](https://thephd.github.io/vendor/future_cxx/papers/source/C%20-%20embed.html). Use with a capable compiler. Errors if your compiler doesn't have the built-in or a way to detect the built-in.
+`std::embed` is C++-only and targeting C++29; an implementation of it is contained in the [patches folder](patches) for Clang and GCC and implements the latest and greatest of the wording from [P1040](https://thephd.github.io/_vendor/future_cxx/papers/d1040.html).
+
+Preprocessor `#embed` has already been integrated into C++26 and C23, from paper [P1967](https://thephd.dev/_vendor/future_cxx/papers/C%20-%20embed.html).
+
+This repository provides an implementation of `std::embed` as `phd::embed`, if the compiler supports it. It also has various examples, tests, and benchmarking bases to use with this. The implementation of `#depend` has to come directly from the compiler itself. `#depend` is required to use appropriately with `phd::embed`/`std::embed`, and the patches for GCC and Clang both cover this.
 
 CC0.
 
 #### NOTE: Clang implementation is the new one that tracks the paper, the GCC implementation is not up to date with the paper yet.
 
-## Clang Implementation Progress
 
-- Clang Progress:
-  - [x] `#embed <>` vs. `#embed ""` handled properly
-  - [x] Parameters (`suffix(token-soup)`, `prefix(token-soup)`, `limit(token-soup)`, `is_empty(token-soup)`)
-  - [x] Unknown parameters are warned on
-  - [x] `__has_embed`
-  - [ ] Re-done builtin for optimizations.
+## Usage - `std::embed`
 
-- [ ] GCC Progress:
-  - Maybe some other day when I am not exhausted.
-
-- [ ] MSVC Progress:
-  - I can't propose features to that compiler. `¯\_(ツ)_/¯`
+See the examples for this can be found [in the directory `examples/std`](examples/std).
 
 
+## Usage - `#embed`
 
-## Usage
-
-More examples that are used to test the compiler can be found [in this directory](examples/).
+More examples that are used to test the compiler can be found [in the directory `examples/stdc`](examples/stdc).
 
 Filesystem:
 
@@ -61,7 +54,7 @@ Foo
 
 ### Preprocessor
 
-`clang -std=c2x -binary-dir ./baz main.c`
+`clang -std=c23 -embed-dir=./baz main.c`
 
 (Works with `g++` / in C++ mode too.)
 
@@ -84,7 +77,7 @@ int main (int, char*[]) {
 ```
 
 
-`clang -std=c2x -binary-dir=./baz main.c`
+`clang -std=c23 -embed-dir=./baz main.c`
 
 `main.c`:
 ```c
@@ -108,7 +101,7 @@ int main (int, char*[]) {
 ```
 
 
-`clang -std=c2x main.c`
+`clang -std=c23 main.c`
 
 (Works with `g++` / in C++ mode too.)
 

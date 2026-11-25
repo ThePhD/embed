@@ -1,7 +1,6 @@
 #include <ctlua/ctlua.hpp>
 
 #include <phd/embed.hpp>
-#include <phd/make_static.hpp>
 
 #depend "resources/**"
 

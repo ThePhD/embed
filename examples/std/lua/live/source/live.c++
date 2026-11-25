@@ -3,7 +3,6 @@
 #include <live/live.hpp>
 
 #include <phd/embed.hpp>
-#include <phd/make_static.hpp>
 
 #include <sol/sol.hpp>
 
@@ -14,6 +13,7 @@ int main(int, char*[]) {
 	constexpr const char original_file[] = {
 #embed <resources/lua/main.lua> suffix(, 0)
 	};
+#if 0
 	constexpr auto lua_code = ctlua::preprocess<"resources/lua/main.lua">();
 
 	std::printf("original file (\"%s\"):\n\n%s", "resources/main.lua", original_file);
@@ -45,4 +45,8 @@ int main(int, char*[]) {
 		}
 	}
 	return 0;
+#else
+	constexpr auto lua_code = phd::embed("resources/lua/main.lua");
+	return (int)lua_code[0] == (int)original_file[0] ? 0 : 1;
+#endif
 }

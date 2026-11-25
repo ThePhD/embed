@@ -11,8 +11,8 @@
 // You should have received a copy of the CC0 Public Domain Dedication along with this software.
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 
-#ifndef PHD_MAKE_STATIC_HPP
-#define PHD_MAKE_STATIC_HPP
+#ifndef PHD_EMBED_MAKE_STATIC_HPP
+#define PHD_EMBED_MAKE_STATIC_HPP
 
 #pragma once
 
